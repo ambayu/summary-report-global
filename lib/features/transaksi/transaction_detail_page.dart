@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
 import '../../core/models/enums.dart';
@@ -12,6 +13,43 @@ class TransactionDetailPage extends ConsumerWidget {
 
   final String transactionId;
 
+  void _handleBack(BuildContext context) {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      return;
+    }
+    context.go('/transaksi');
+  }
+
+  Future<bool> _confirmAction({
+    required BuildContext context,
+    required String title,
+    required String message,
+    String confirmLabel = 'Ya',
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Kembali'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(confirmLabel),
+            ),
+          ],
+        );
+      },
+    );
+
+    return result ?? false;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repository = ref.read(transactionRepositoryProvider);
@@ -22,13 +60,25 @@ class TransactionDetailPage extends ConsumerWidget {
         final tx = repository.findById(transactionId);
         if (tx == null) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Detail Transaksi')),
+            appBar: AppBar(
+              leading: IconButton(
+                onPressed: () => _handleBack(context),
+                icon: const Icon(Icons.arrow_back),
+              ),
+              title: const Text('Detail Transaksi'),
+            ),
             body: const Center(child: Text('Transaksi tidak ditemukan.')),
           );
         }
 
         return Scaffold(
-          appBar: AppBar(title: Text(tx.orderNo)),
+          appBar: AppBar(
+            leading: IconButton(
+              onPressed: () => _handleBack(context),
+              icon: const Icon(Icons.arrow_back),
+            ),
+            title: Text(tx.orderNo),
+          ),
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -123,22 +173,60 @@ class TransactionDetailPage extends ConsumerWidget {
                 ),
               const SizedBox(height: 8),
               OutlinedButton.icon(
-                onPressed: () async {
-                  await repository.updateStatus(
-                    id: tx.id,
-                    status: TransactionStatus.batal,
-                    paidAmount: 0,
-                  );
-                },
+                onPressed: tx.status == TransactionStatus.batal
+                    ? null
+                    : () async {
+                        final confirmed = await _confirmAction(
+                          context: context,
+                          title: 'Batalkan transaksi?',
+                          message:
+                              'Status transaksi akan diubah menjadi Batal dan pembayaran direset ke Rp 0.',
+                          confirmLabel: 'Batalkan',
+                        );
+                        if (!confirmed) return;
+
+                        await repository.updateStatus(
+                          id: tx.id,
+                          status: TransactionStatus.batal,
+                          paidAmount: 0,
+                        );
+
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Transaksi berhasil dibatalkan'),
+                            ),
+                          );
+                        }
+                      },
                 icon: const Icon(Icons.cancel_outlined),
-                label: const Text('Batalkan Transaksi'),
+                label: Text(
+                  tx.status == TransactionStatus.batal
+                      ? 'Transaksi Sudah Batal'
+                      : 'Batalkan Transaksi',
+                ),
               ),
               const SizedBox(height: 8),
               TextButton.icon(
                 onPressed: () async {
+                  final confirmed = await _confirmAction(
+                    context: context,
+                    title: 'Hapus transaksi ini?',
+                    message:
+                        'Data transaksi yang dihapus tidak bisa dikembalikan.',
+                    confirmLabel: 'Hapus',
+                  );
+                  if (!confirmed) return;
+
                   await repository.delete(tx.id);
+
                   if (context.mounted) {
-                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Transaksi berhasil dihapus'),
+                      ),
+                    );
+                    context.go('/transaksi');
                   }
                 },
                 icon: const Icon(Icons.delete_outline),

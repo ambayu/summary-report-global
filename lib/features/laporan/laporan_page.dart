@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
 
 import '../../app/providers.dart';
 import '../../core/models/enums.dart';
@@ -15,6 +18,11 @@ class LaporanPage extends ConsumerStatefulWidget {
 
 class _LaporanPageState extends ConsumerState<LaporanPage> {
   String _period = 'hari';
+  int? _selectedYear;
+  DateTimeRange? _dateRange;
+  bool _busy = false;
+  Timer? _importHoldTimer;
+  bool _skipNextExportTap = false;
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +37,12 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
           builder: (context, box2, child2) {
             final now = DateTime.now();
             final tx = txRepo.getAll().where((item) {
+              if (_selectedYear != null &&
+                  item.createdAt.year != _selectedYear) {
+                return false;
+              }
+              if (!_isWithinRange(item.createdAt, _dateRange)) return false;
+
               if (_period == 'hari') {
                 return item.createdAt.year == now.year &&
                     item.createdAt.month == now.month &&
@@ -44,6 +58,12 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
             }).toList();
 
             final ex = expenseRepo.getAll().where((item) {
+              if (_selectedYear != null &&
+                  item.createdAt.year != _selectedYear) {
+                return false;
+              }
+              if (!_isWithinRange(item.createdAt, _dateRange)) return false;
+
               if (_period == 'hari') {
                 return item.createdAt.year == now.year &&
                     item.createdAt.month == now.month &&
@@ -74,11 +94,78 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
               (sum, item) => sum + item.amount,
             );
             final profit = omzet - expense;
+            final years = {
+              now.year,
+              ...txRepo.getAll().map((item) => item.createdAt.year),
+            }.toList()..sort((a, b) => b.compareTo(a));
 
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                DropdownButtonFormField<int?>(
+                  initialValue: _selectedYear,
+                  decoration: const InputDecoration(
+                    labelText: 'Tahun Data',
+                    prefixIcon: Icon(Icons.calendar_today_outlined),
+                  ),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('Semua Tahun'),
+                    ),
+                    ...years.map(
+                      (year) => DropdownMenuItem<int?>(
+                        value: year,
+                        child: Text(year.toString()),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) => setState(() => _selectedYear = value),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : _pickDateRange,
+                        icon: const Icon(Icons.date_range_outlined),
+                        label: Text(
+                          _dateRange == null
+                              ? 'Rentang Tanggal'
+                              : '${_fmtDate(_dateRange!.start)} - ${_fmtDate(_dateRange!.end)}',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Reset rentang tanggal',
+                      onPressed: _dateRange == null
+                          ? null
+                          : () => setState(() => _dateRange = null),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
                 SegmentedButton<String>(
+                  style: ButtonStyle(
+                    foregroundColor: WidgetStateProperty.resolveWith<Color>((
+                      states,
+                    ) {
+                      if (states.contains(WidgetState.selected)) {
+                        return Colors.white;
+                      }
+                      return Theme.of(context).colorScheme.onSurface;
+                    }),
+                    backgroundColor: WidgetStateProperty.resolveWith<Color>((
+                      states,
+                    ) {
+                      if (states.contains(WidgetState.selected)) {
+                        return Theme.of(context).colorScheme.primary;
+                      }
+                      return Theme.of(context).colorScheme.surface;
+                    }),
+                  ),
                   segments: const [
                     ButtonSegment(value: 'hari', label: Text('Harian')),
                     ButtonSegment(value: 'minggu', label: Text('Mingguan')),
@@ -140,19 +227,50 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Export PDF/Excel akan ditambahkan di fase berikutnya.',
+                const SizedBox(height: 12),
+                Card(
+                  child: Column(
+                    children: [
+                      Listener(
+                        onPointerDown: _busy ? null : (_) => _startImportHold(),
+                        onPointerUp: _busy
+                            ? null
+                            : (_) {
+                                _cancelImportHold();
+                              },
+                        onPointerCancel: _busy
+                            ? null
+                            : (_) {
+                                _cancelImportHold();
+                              },
+                        child: ListTile(
+                          leading: const Icon(Icons.file_download_outlined),
+                          title: const Text('Export XLSX'),
+                          subtitle: const Text(
+                            'Pilih rentang tanggal saat export',
+                          ),
+                          trailing: _busy
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.chevron_right),
+                          onTap: _busy
+                              ? null
+                              : () async {
+                                  if (_skipNextExportTap) {
+                                    _skipNextExportTap = false;
+                                    return;
+                                  }
+                                  await _onExportXlsx();
+                                },
                         ),
                       ),
-                    );
-                  },
-                  icon: const Icon(Icons.file_download_outlined),
-                  label: const Text('Export Laporan'),
+                    ],
+                  ),
                 ),
               ],
             );
@@ -160,6 +278,64 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
         );
       },
     );
+  }
+
+  Future<void> _pickDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 5, 12, 31),
+      initialDateRange: _dateRange,
+    );
+    if (picked == null) return;
+    setState(() => _dateRange = picked);
+  }
+
+  bool _isWithinRange(DateTime date, DateTimeRange? range) {
+    if (range == null) return true;
+    final start = DateTime(
+      range.start.year,
+      range.start.month,
+      range.start.day,
+    );
+    final end = DateTime(
+      range.end.year,
+      range.end.month,
+      range.end.day,
+      23,
+      59,
+      59,
+      999,
+    );
+    if (date.isBefore(start)) return false;
+    if (date.isAfter(end)) return false;
+    return true;
+  }
+
+  String _fmtDate(DateTime value) {
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    return '$day/$month/${value.year}';
+  }
+
+  @override
+  void dispose() {
+    _importHoldTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startImportHold() {
+    _importHoldTimer?.cancel();
+    _importHoldTimer = Timer(const Duration(seconds: 2), () async {
+      if (!mounted || _busy) return;
+      _skipNextExportTap = true;
+      await _onImportXlsx();
+    });
+  }
+
+  void _cancelImportHold() {
+    _importHoldTimer?.cancel();
   }
 
   Widget _line(String label, String value, {bool bold = false}) {
@@ -178,5 +354,108 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _onImportXlsx() async {
+    setState(() => _busy = true);
+    try {
+      final file = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xlsx'],
+        withData: true,
+      );
+      if (file == null) return;
+
+      final picked = file.files.single;
+      final bytes =
+          picked.bytes ??
+          (picked.path == null ? null : await File(picked.path!).readAsBytes());
+      if (bytes == null) return;
+
+      final imported = await ref
+          .read(transactionRepositoryProvider)
+          .importFromXlsx(bytes);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$imported baris berhasil di-import dari XLSX')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Import XLSX gagal. Periksa format file.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _onExportXlsx() async {
+    final now = DateTime.now();
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 5, 12, 31),
+      initialDateRange: DateTimeRange(
+        start: DateTime(now.year, now.month, 1),
+        end: now,
+      ),
+    );
+
+    if (range == null) return;
+
+    setState(() => _busy = true);
+    try {
+      final bytes = ref
+          .read(transactionRepositoryProvider)
+          .exportReportToXlsx(
+            year: _selectedYear,
+            startDate: range.start,
+            endDate: range.end,
+          );
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final defaultName = _selectedYear == null
+          ? 'laporan_$timestamp.xlsx'
+          : 'laporan_${_selectedYear}_$timestamp.xlsx';
+
+      String? savePath;
+      if (Platform.isAndroid || Platform.isIOS) {
+        final directory = await FilePicker.platform.getDirectoryPath(
+          dialogTitle: 'Pilih folder simpan XLSX',
+        );
+        if (directory != null && directory.isNotEmpty) {
+          savePath = '$directory/$defaultName';
+        }
+      } else {
+        savePath = await FilePicker.platform.saveFile(
+          dialogTitle: 'Simpan XLSX Laporan',
+          fileName: defaultName,
+          type: FileType.custom,
+          allowedExtensions: ['xlsx'],
+        );
+      }
+
+      if (savePath == null) return;
+      if (!savePath.toLowerCase().endsWith('.xlsx')) {
+        savePath = '$savePath.xlsx';
+      }
+
+      final file = File(savePath);
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(bytes, flush: true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export XLSX berhasil: $savePath')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Export XLSX gagal. Coba ulangi lagi.')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 }

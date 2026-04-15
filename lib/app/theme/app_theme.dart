@@ -77,7 +77,29 @@ class AppTheme {
       ),
       chipTheme: base.chipTheme.copyWith(
         side: const BorderSide(color: AppColors.border),
-        selectedColor: AppColors.primaryRed.withOpacity(0.12),
+        selectedColor: AppColors.primaryRed.withValues(alpha: 0.12),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: AppColors.surfaceWhite,
+        indicatorColor: AppColors.primaryRed,
+        iconTheme: WidgetStateProperty.resolveWith<IconThemeData>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const IconThemeData(color: Colors.white);
+          }
+          return const IconThemeData(color: AppColors.textDark);
+        }),
+        labelTextStyle: WidgetStateProperty.resolveWith<TextStyle>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return GoogleFonts.dmSans(
+              fontWeight: FontWeight.w700,
+              color: AppColors.primaryRed,
+            );
+          }
+          return GoogleFonts.dmSans(
+            fontWeight: FontWeight.w600,
+            color: AppColors.textDark,
+          );
+        }),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: AppColors.primaryRed,

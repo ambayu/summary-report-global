@@ -96,7 +96,7 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
       );
       if (!context.mounted) return;
       setState(() => _saving = false);
-      context.go('/transaksi/${created.id}');
+      context.push('/transaksi/${created.id}');
     }
 
     return Scaffold(

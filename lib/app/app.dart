@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
+import '../core/models/app_settings.dart';
+import '../core/storage/local_storage.dart';
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
 
@@ -10,12 +13,27 @@ class SummaryApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final router = AppRouter(initialLocation: initialLocation).router;
-    return MaterialApp.router(
-      title: 'Summary Report Cafe',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      routerConfig: router,
+    return ValueListenableBuilder(
+      valueListenable: LocalStorage.settingsBox.listenable(),
+      builder: (context, box, child) {
+        final router = AppRouter(initialLocation: initialLocation).router;
+        final raw = LocalStorage.settingsBox.get('default');
+        final settings = raw == null
+            ? const AppSettings(
+                cafeName: 'Summary Cafe',
+                taxPercent: 10,
+                servicePercent: 5,
+                activePayments: [],
+              )
+            : AppSettings.fromMap(raw);
+
+        return MaterialApp.router(
+          title: settings.cafeName,
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          routerConfig: router,
+        );
+      },
     );
   }
 }
