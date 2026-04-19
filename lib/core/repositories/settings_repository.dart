@@ -13,6 +13,7 @@ class SettingsRepository {
     if (raw == null) {
       return const AppSettings(
         cafeName: 'Summary Cafe',
+        logoBase64: null,
         taxPercent: 10,
         servicePercent: 5,
         activePayments: [],

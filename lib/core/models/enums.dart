@@ -1,5 +1,17 @@
 enum UserRole { owner, admin, kasir }
 
+enum AppPermission {
+  dashboard,
+  transaksi,
+  riwayat,
+  laporan,
+  produk,
+  pelanggan,
+  pengeluaran,
+  pengaturan,
+  manageUsers,
+}
+
 enum PaymentMethod { cash, qris, debitKredit, ewallet, transfer }
 
 enum TransactionStatus { lunas, pending, splitBill, refund, batal }
@@ -13,6 +25,58 @@ extension UserRoleX on UserRole {
         return 'Admin';
       case UserRole.kasir:
         return 'Kasir';
+    }
+  }
+
+  List<AppPermission> get permissions {
+    switch (this) {
+      case UserRole.owner:
+        return AppPermission.values;
+      case UserRole.admin:
+        return const [
+          AppPermission.dashboard,
+          AppPermission.transaksi,
+          AppPermission.riwayat,
+          AppPermission.laporan,
+          AppPermission.produk,
+          AppPermission.pelanggan,
+          AppPermission.pengeluaran,
+        ];
+      case UserRole.kasir:
+        return const [
+          AppPermission.dashboard,
+          AppPermission.transaksi,
+          AppPermission.riwayat,
+        ];
+    }
+  }
+
+  bool hasPermission(AppPermission permission) {
+    return permissions.contains(permission);
+  }
+}
+
+extension AppPermissionX on AppPermission {
+  String get label {
+    switch (this) {
+      case AppPermission.dashboard:
+        return 'Dashboard';
+      case AppPermission.transaksi:
+        return 'Transaksi';
+      case AppPermission.riwayat:
+        return 'Riwayat';
+      case AppPermission.laporan:
+        return 'Laporan';
+      case AppPermission.produk:
+        return 'Menu Produk';
+      case AppPermission.pelanggan:
+        return 'Pelanggan';
+      case AppPermission.pengeluaran:
+        return 'Pengeluaran';
+      case AppPermission.pengaturan:
+        return 'Pengaturan';
+      case AppPermission.manageUsers:
+        return 'Manajemen User';
     }
   }
 }

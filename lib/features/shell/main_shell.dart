@@ -6,6 +6,7 @@ import '../../app/providers.dart';
 import '../../app/router/route_names.dart';
 import '../../app/theme/app_colors.dart';
 import '../../core/models/enums.dart';
+import '../../shared/widgets/brand_avatar.dart';
 
 class MainShell extends ConsumerWidget {
   const MainShell({super.key, required this.navigationShell});
@@ -17,16 +18,38 @@ class MainShell extends ConsumerWidget {
     final session = ref.read(authRepositoryProvider).currentSession;
     final settingsRepo = ref.read(settingsRepositoryProvider);
 
-    final titles = ['Dashboard', 'Transaksi', 'Riwayat', 'Laporan'];
-
     return ValueListenableBuilder(
       valueListenable: settingsRepo.listenable,
       builder: (context, box, child) {
-        final brandName = settingsRepo.settings.cafeName;
+        final settings = settingsRepo.settings;
+        final brandName = settings.cafeName;
+        final role = session?.role;
+        final rootDestinations = _buildRootDestinations(role);
+        final safeDestinations = rootDestinations.isEmpty
+            ? const [
+                _ShellDestination(
+                  branchIndex: 0,
+                  label: 'Dashboard',
+                  icon: Icons.home_outlined,
+                  selectedIcon: Icons.home,
+                  permission: AppPermission.dashboard,
+                ),
+              ]
+            : rootDestinations;
+        final selectedNavIndex = rootDestinations.indexWhere(
+          (item) => item.branchIndex == navigationShell.currentIndex,
+        );
+        final visibleNavIndex = selectedNavIndex < 0 ? 0 : selectedNavIndex;
+        final appBarTitle = safeDestinations
+            .firstWhere(
+              (item) => item.branchIndex == navigationShell.currentIndex,
+              orElse: () => safeDestinations.first,
+            )
+            .label;
 
         return Scaffold(
           appBar: AppBar(
-            title: Text('$brandName - ${titles[navigationShell.currentIndex]}'),
+            title: Text('$brandName - $appBarTitle'),
             actions: [
               PopupMenuButton<String>(
                 icon: CircleAvatar(
@@ -52,12 +75,20 @@ class MainShell extends ConsumerWidget {
                     }
                   }
                 },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'home', child: Text('Halaman Utama')),
-                  PopupMenuItem(value: 'profile', child: Text('Profil')),
-                  PopupMenuItem(value: 'settings', child: Text('Pengaturan')),
-                  PopupMenuDivider(),
-                  PopupMenuItem(value: 'logout', child: Text('Logout')),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'home',
+                    child: Text('Halaman Utama'),
+                  ),
+                  const PopupMenuItem(value: 'profile', child: Text('Profil')),
+                  if (role != null &&
+                      role.hasPermission(AppPermission.pengaturan))
+                    const PopupMenuItem(
+                      value: 'settings',
+                      child: Text('Pengaturan'),
+                    ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(value: 'logout', child: Text('Logout')),
                 ],
               ),
               const SizedBox(width: 8),
@@ -72,8 +103,9 @@ class MainShell extends ConsumerWidget {
                       colors: [AppColors.primaryRed, AppColors.primaryDark],
                     ),
                   ),
-                  currentAccountPicture: CircleAvatar(
-                    child: Text(_brandInitial(brandName)),
+                  currentAccountPicture: BrandAvatar(
+                    brandName: brandName,
+                    logoBase64: settings.logoBase64,
                   ),
                   accountName: Text(brandName),
                   accountEmail: Text(
@@ -90,26 +122,44 @@ class MainShell extends ConsumerWidget {
                   title: const Text('Transaksi'),
                   onTap: () => context.go(RouteNames.transaksi),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.local_cafe_outlined),
-                  title: const Text('Menu Produk'),
-                  onTap: () => context.push(RouteNames.produk),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.groups_outlined),
-                  title: const Text('Pelanggan'),
-                  onTap: () => context.push(RouteNames.pelanggan),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.payments_outlined),
-                  title: const Text('Pengeluaran'),
-                  onTap: () => context.push(RouteNames.pengeluaran),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.settings_outlined),
-                  title: const Text('Pengaturan'),
-                  onTap: () => context.push(RouteNames.pengaturan),
-                ),
+                if (role != null && role.hasPermission(AppPermission.riwayat))
+                  ListTile(
+                    leading: const Icon(Icons.history_outlined),
+                    title: const Text('Riwayat'),
+                    onTap: () => context.go(RouteNames.riwayat),
+                  ),
+                if (role != null && role.hasPermission(AppPermission.laporan))
+                  ListTile(
+                    leading: const Icon(Icons.bar_chart_outlined),
+                    title: const Text('Laporan'),
+                    onTap: () => context.go(RouteNames.laporan),
+                  ),
+                if (role != null && role.hasPermission(AppPermission.produk))
+                  ListTile(
+                    leading: const Icon(Icons.local_cafe_outlined),
+                    title: const Text('Menu Produk'),
+                    onTap: () => context.push(RouteNames.produk),
+                  ),
+                if (role != null && role.hasPermission(AppPermission.pelanggan))
+                  ListTile(
+                    leading: const Icon(Icons.groups_outlined),
+                    title: const Text('Pelanggan'),
+                    onTap: () => context.push(RouteNames.pelanggan),
+                  ),
+                if (role != null &&
+                    role.hasPermission(AppPermission.pengeluaran))
+                  ListTile(
+                    leading: const Icon(Icons.payments_outlined),
+                    title: const Text('Pengeluaran'),
+                    onTap: () => context.push(RouteNames.pengeluaran),
+                  ),
+                if (role != null &&
+                    role.hasPermission(AppPermission.pengaturan))
+                  ListTile(
+                    leading: const Icon(Icons.settings_outlined),
+                    title: const Text('Pengaturan'),
+                    onTap: () => context.push(RouteNames.pengaturan),
+                  ),
                 const Spacer(),
                 const Divider(height: 1),
                 ListTile(
@@ -128,52 +178,80 @@ class MainShell extends ConsumerWidget {
           ),
           body: navigationShell,
           bottomNavigationBar: NavigationBar(
-            selectedIndex: navigationShell.currentIndex,
+            selectedIndex: visibleNavIndex,
             onDestinationSelected: (index) {
+              final target = safeDestinations[index];
               navigationShell.goBranch(
-                index,
-                initialLocation: index == navigationShell.currentIndex,
+                target.branchIndex,
+                initialLocation:
+                    target.branchIndex == navigationShell.currentIndex,
               );
             },
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: 'Dashboard',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.point_of_sale_outlined),
-                selectedIcon: Icon(Icons.point_of_sale),
-                label: 'Transaksi',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.history_outlined),
-                selectedIcon: Icon(Icons.history),
-                label: 'Riwayat',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.bar_chart_outlined),
-                selectedIcon: Icon(Icons.bar_chart),
-                label: 'Laporan',
-              ),
-            ],
+            destinations: safeDestinations
+                .map(
+                  (item) => NavigationDestination(
+                    icon: Icon(item.icon),
+                    selectedIcon: Icon(item.selectedIcon),
+                    label: item.label,
+                  ),
+                )
+                .toList(),
           ),
         );
       },
     );
   }
 
-  String _brandInitial(String brandName) {
-    final text = brandName.trim();
-    if (text.isEmpty) return 'SC';
-    final parts = text.split(RegExp(r'\s+')).where((item) => item.isNotEmpty);
-    if (parts.isEmpty) return 'SC';
-    if (parts.length == 1) {
-      final word = parts.first;
-      return word.length >= 2
-          ? word.substring(0, 2).toUpperCase()
-          : word.toUpperCase();
-    }
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  List<_ShellDestination> _buildRootDestinations(UserRole? role) {
+    final destinations = <_ShellDestination>[
+      const _ShellDestination(
+        branchIndex: 0,
+        label: 'Dashboard',
+        icon: Icons.home_outlined,
+        selectedIcon: Icons.home,
+        permission: AppPermission.dashboard,
+      ),
+      const _ShellDestination(
+        branchIndex: 1,
+        label: 'Transaksi',
+        icon: Icons.point_of_sale_outlined,
+        selectedIcon: Icons.point_of_sale,
+        permission: AppPermission.transaksi,
+      ),
+      const _ShellDestination(
+        branchIndex: 2,
+        label: 'Riwayat',
+        icon: Icons.history_outlined,
+        selectedIcon: Icons.history,
+        permission: AppPermission.riwayat,
+      ),
+      const _ShellDestination(
+        branchIndex: 3,
+        label: 'Laporan',
+        icon: Icons.bar_chart_outlined,
+        selectedIcon: Icons.bar_chart,
+        permission: AppPermission.laporan,
+      ),
+    ];
+
+    return destinations.where((item) {
+      return role?.hasPermission(item.permission) ?? false;
+    }).toList();
   }
+}
+
+class _ShellDestination {
+  const _ShellDestination({
+    required this.branchIndex,
+    required this.label,
+    required this.icon,
+    required this.selectedIcon,
+    required this.permission,
+  });
+
+  final int branchIndex;
+  final String label;
+  final IconData icon;
+  final IconData selectedIcon;
+  final AppPermission permission;
 }

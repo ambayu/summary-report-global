@@ -9,6 +9,7 @@ import '../../core/models/app_transaction.dart';
 import '../../core/models/enums.dart';
 import '../../core/utils/currency.dart';
 import '../../core/utils/date_time.dart';
+import '../../shared/widgets/brand_avatar.dart';
 import '../../shared/widgets/kpi_card.dart';
 
 class DashboardPage extends ConsumerWidget {
@@ -23,7 +24,8 @@ class DashboardPage extends ConsumerWidget {
     return ValueListenableBuilder(
       valueListenable: settingsRepo.listenable,
       builder: (context, box0, child0) {
-        final brandName = settingsRepo.settings.cafeName;
+        final settings = settingsRepo.settings;
+        final brandName = settings.cafeName;
 
         return ValueListenableBuilder(
           valueListenable: transactionRepo.listenable,
@@ -97,8 +99,9 @@ class DashboardPage extends ConsumerWidget {
                     children: [
                       Card(
                         child: ListTile(
-                          leading: CircleAvatar(
-                            child: Text(_brandInitial(brandName)),
+                          leading: BrandAvatar(
+                            brandName: brandName,
+                            logoBase64: settings.logoBase64,
                           ),
                           title: Text(brandName),
                           subtitle: const Text('Dashboard Brand Aplikasi'),
@@ -276,20 +279,6 @@ class DashboardPage extends ConsumerWidget {
         );
       },
     );
-  }
-
-  String _brandInitial(String brandName) {
-    final text = brandName.trim();
-    if (text.isEmpty) return 'SC';
-    final parts = text.split(RegExp(r'\s+')).where((item) => item.isNotEmpty);
-    if (parts.isEmpty) return 'SC';
-    if (parts.length == 1) {
-      final word = parts.first;
-      return word.length >= 2
-          ? word.substring(0, 2).toUpperCase()
-          : word.toUpperCase();
-    }
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 
   List<Map<String, Object>> _last7DaysIncome(

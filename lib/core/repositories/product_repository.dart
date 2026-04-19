@@ -30,6 +30,7 @@ class ProductRepository {
   Future<Product> create({
     required String name,
     required String category,
+    String? imageBase64,
     required double sellPrice,
     required double costPrice,
     required int stock,
@@ -39,6 +40,7 @@ class ProductRepository {
       id: _uuid.v4(),
       name: name.trim(),
       category: category.trim().isEmpty ? 'Umum' : category.trim(),
+      imageBase64: imageBase64,
       sellPrice: sellPrice,
       costPrice: costPrice,
       available: true,

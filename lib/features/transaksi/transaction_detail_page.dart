@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
+import '../../core/models/app_transaction.dart';
 import '../../core/models/enums.dart';
 import '../../core/utils/currency.dart';
 import '../../core/utils/date_time.dart';
+import '../../core/utils/receipt_printing.dart';
 import '../../shared/widgets/status_badge.dart';
 
 class TransactionDetailPage extends ConsumerWidget {
@@ -50,6 +52,26 @@ class TransactionDetailPage extends ConsumerWidget {
     return result ?? false;
   }
 
+  Future<void> _printReceipt(
+    BuildContext context,
+    WidgetRef ref,
+    AppTransaction tx,
+  ) async {
+    final settings = ref.read(settingsRepositoryProvider).settings;
+
+    try {
+      await ReceiptPrinting.printTransaction(
+        transaction: tx,
+        settings: settings,
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Print struk gagal dijalankan')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repository = ref.read(transactionRepositoryProvider);
@@ -78,6 +100,13 @@ class TransactionDetailPage extends ConsumerWidget {
               icon: const Icon(Icons.arrow_back),
             ),
             title: Text(tx.orderNo),
+            actions: [
+              IconButton(
+                tooltip: 'Print struk',
+                onPressed: () => _printReceipt(context, ref, tx),
+                icon: const Icon(Icons.print_outlined),
+              ),
+            ],
           ),
           body: ListView(
             padding: const EdgeInsets.all(16),
@@ -135,7 +164,8 @@ class TransactionDetailPage extends ConsumerWidget {
                       _line('Subtotal', formatCurrency(tx.subtotal)),
                       _line('Diskon', '- ${formatCurrency(tx.discountAmount)}'),
                       _line('Pajak', formatCurrency(tx.taxAmount)),
-                      _line('Service', formatCurrency(tx.serviceAmount)),
+                      if (tx.serviceAmount > 0)
+                        _line('Service', formatCurrency(tx.serviceAmount)),
                       const Divider(),
                       _line(
                         'Grand Total',
@@ -153,6 +183,12 @@ class TransactionDetailPage extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 12),
+              FilledButton.tonalIcon(
+                onPressed: () => _printReceipt(context, ref, tx),
+                icon: const Icon(Icons.print_outlined),
+                label: const Text('Print Struk'),
+              ),
+              const SizedBox(height: 8),
               if (tx.status != TransactionStatus.lunas)
                 FilledButton.icon(
                   onPressed: () async {

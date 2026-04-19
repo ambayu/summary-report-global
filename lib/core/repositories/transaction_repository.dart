@@ -374,6 +374,56 @@ class TransactionRepository {
     return buffer.toString();
   }
 
+  Uint8List exportFilteredToXlsx({
+    TransactionStatus? status,
+    DateTime? startDate,
+    DateTime? endDate,
+    String sheetName = 'Transaksi',
+  }) {
+    final excel = Excel.createExcel();
+    final sheet = excel[sheetName];
+
+    sheet.appendRow([
+      TextCellValue('Tanggal'),
+      TextCellValue('Order'),
+      TextCellValue('Meja'),
+      TextCellValue('Status'),
+      TextCellValue('Metode'),
+      TextCellValue('Item'),
+      TextCellValue('Qty'),
+      TextCellValue('Harga'),
+      TextCellValue('Subtotal'),
+      TextCellValue('Pajak'),
+      TextCellValue('Service'),
+      TextCellValue('Total'),
+    ]);
+
+    for (final tx in getAll().reversed) {
+      if (status != null && tx.status != status) continue;
+      if (!_isWithinRange(tx.createdAt, startDate, endDate)) continue;
+
+      for (final item in tx.items) {
+        sheet.appendRow([
+          TextCellValue(_formatDate(tx.createdAt)),
+          TextCellValue(tx.orderNo),
+          TextCellValue(tx.tableNo),
+          TextCellValue(tx.status.label),
+          TextCellValue(tx.paymentMethod.label),
+          TextCellValue(item.productName),
+          IntCellValue(item.qty),
+          DoubleCellValue(item.unitPrice),
+          DoubleCellValue(item.total),
+          DoubleCellValue(tx.taxAmount),
+          DoubleCellValue(tx.serviceAmount),
+          DoubleCellValue(tx.grandTotal),
+        ]);
+      }
+    }
+
+    final bytes = excel.save();
+    return Uint8List.fromList(bytes ?? <int>[]);
+  }
+
   Uint8List exportReportToXlsx({
     int? year,
     DateTime? startDate,

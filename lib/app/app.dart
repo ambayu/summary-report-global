@@ -21,6 +21,7 @@ class SummaryApp extends StatelessWidget {
         final settings = raw == null
             ? const AppSettings(
                 cafeName: 'Summary Cafe',
+                logoBase64: null,
                 taxPercent: 10,
                 servicePercent: 5,
                 activePayments: [],

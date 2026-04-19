@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../core/models/enums.dart';
 import '../../core/utils/currency.dart';
+import '../../shared/widgets/access_denied_state.dart';
 
 class PelangganPage extends ConsumerStatefulWidget {
   const PelangganPage({super.key});
@@ -23,6 +25,16 @@ class _PelangganPageState extends ConsumerState<PelangganPage> {
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.read(authRepositoryProvider).currentSession;
+    if (!(session?.role.hasPermission(AppPermission.pelanggan) ?? false)) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Pelanggan')),
+        body: const AccessDeniedState(
+          message: 'Role Anda belum memiliki akses ke data pelanggan.',
+        ),
+      );
+    }
+
     final repository = ref.read(customerRepositoryProvider);
 
     Future<void> showCustomerDialog({

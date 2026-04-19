@@ -1,14 +1,12 @@
-import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
 import '../../core/models/enums.dart';
 import '../../core/utils/currency.dart';
 import '../../core/utils/date_time.dart';
+import '../../core/utils/export_file_helper.dart';
 import '../../shared/widgets/status_badge.dart';
 
 class TransaksiPage extends ConsumerStatefulWidget {
@@ -110,8 +108,8 @@ class _TransaksiPageState extends ConsumerState<TransaksiPage> {
                 ),
                 const SizedBox(width: 6),
                 IconButton.filled(
-                  tooltip: 'Export transaksi sesuai filter',
-                  onPressed: _exporting ? null : _exportFilteredCsv,
+                  tooltip: 'Export XLSX transaksi sesuai filter',
+                  onPressed: _exporting ? null : _exportFilteredXlsx,
                   icon: _exporting
                       ? const SizedBox(
                           width: 16,
@@ -188,31 +186,31 @@ class _TransaksiPageState extends ConsumerState<TransaksiPage> {
     setState(() => _dateRange = picked);
   }
 
-  Future<void> _exportFilteredCsv() async {
+  Future<void> _exportFilteredXlsx() async {
     setState(() => _exporting = true);
     try {
       final repository = ref.read(transactionRepositoryProvider);
-      final csv = repository.exportFilteredToCsv(
+      final bytes = repository.exportFilteredToXlsx(
         status: _filter,
         startDate: _dateRange?.start,
         endDate: _dateRange?.end,
       );
 
       final now = DateTime.now().millisecondsSinceEpoch;
-      final savePath = await FilePicker.platform.saveFile(
-        dialogTitle: 'Simpan Export Transaksi',
-        fileName: 'transaksi_filter_$now.csv',
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-        bytes: Uint8List.fromList(utf8.encode(csv)),
+      final savePath = await ExportFileHelper.saveBytes(
+        dialogTitle: 'Simpan Export Transaksi XLSX',
+        fileName: 'transaksi_filter_$now.xlsx',
+        allowedExtensions: const ['xlsx'],
+        bytes: bytes,
       );
 
       if (savePath == null) return;
       if (!mounted) return;
-      final infoPath = savePath.isEmpty ? 'lokasi terpilih' : savePath;
-      ScaffoldMessenger.of(
+      await ExportFileHelper.promptOpenFile(
         context,
-      ).showSnackBar(SnackBar(content: Text('Export berhasil: $infoPath')));
+        filePath: savePath,
+        successMessage: 'File XLSX transaksi berhasil disimpan di:\n$savePath',
+      );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

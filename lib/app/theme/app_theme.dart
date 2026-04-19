@@ -36,8 +36,10 @@ class AppTheme {
       colorScheme: const ColorScheme.light(
         primary: AppColors.primaryRed,
         secondary: AppColors.primaryDark,
+        secondaryContainer: AppColors.primaryRed,
         surface: AppColors.surfaceWhite,
         onPrimary: Colors.white,
+        onSecondaryContainer: Colors.white,
         onSurface: AppColors.textDark,
       ),
       appBarTheme: AppBarTheme(
@@ -77,7 +79,45 @@ class AppTheme {
       ),
       chipTheme: base.chipTheme.copyWith(
         side: const BorderSide(color: AppColors.border),
-        selectedColor: AppColors.primaryRed.withValues(alpha: 0.12),
+        selectedColor: AppColors.primaryRed,
+        secondarySelectedColor: AppColors.primaryRed,
+        checkmarkColor: Colors.white,
+        labelStyle: GoogleFonts.dmSans(
+          fontWeight: FontWeight.w600,
+          color: AppColors.textDark,
+        ),
+        secondaryLabelStyle: GoogleFonts.dmSans(
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+            if (states.contains(WidgetState.selected)) {
+              return Colors.white;
+            }
+            return AppColors.textDark;
+          }),
+          iconColor: WidgetStateProperty.resolveWith<Color>((states) {
+            if (states.contains(WidgetState.selected)) {
+              return Colors.white;
+            }
+            return AppColors.textDark;
+          }),
+          backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+            if (states.contains(WidgetState.selected)) {
+              return AppColors.primaryRed;
+            }
+            return AppColors.surfaceWhite;
+          }),
+          side: const WidgetStatePropertyAll(
+            BorderSide(color: AppColors.primaryDark),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+          ),
+        ),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.surfaceWhite,
@@ -113,6 +153,15 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.primaryRed,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: AppColors.primaryRed.withValues(alpha: 0.45),
+          disabledForegroundColor: Colors.white,
+          textStyle: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
         ),
       ),
     );

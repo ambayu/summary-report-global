@@ -3,6 +3,7 @@ class Product {
     required this.id,
     required this.name,
     required this.category,
+    this.imageBase64,
     required this.sellPrice,
     required this.costPrice,
     required this.available,
@@ -14,6 +15,7 @@ class Product {
   final String id;
   final String name;
   final String category;
+  final String? imageBase64;
   final double sellPrice;
   final double costPrice;
   final bool available;
@@ -25,6 +27,7 @@ class Product {
     String? id,
     String? name,
     String? category,
+    String? imageBase64,
     double? sellPrice,
     double? costPrice,
     bool? available,
@@ -36,6 +39,7 @@ class Product {
       id: id ?? this.id,
       name: name ?? this.name,
       category: category ?? this.category,
+      imageBase64: imageBase64 ?? this.imageBase64,
       sellPrice: sellPrice ?? this.sellPrice,
       costPrice: costPrice ?? this.costPrice,
       available: available ?? this.available,
@@ -50,6 +54,7 @@ class Product {
       'id': id,
       'name': name,
       'category': category,
+      'imageBase64': imageBase64,
       'sellPrice': sellPrice,
       'costPrice': costPrice,
       'available': available,
@@ -64,6 +69,7 @@ class Product {
       id: map['id']?.toString() ?? '',
       name: map['name']?.toString() ?? '',
       category: map['category']?.toString() ?? 'Umum',
+      imageBase64: map['imageBase64']?.toString(),
       sellPrice: (map['sellPrice'] as num?)?.toDouble() ?? 0,
       costPrice: (map['costPrice'] as num?)?.toDouble() ?? 0,
       available: map['available'] as bool? ?? true,

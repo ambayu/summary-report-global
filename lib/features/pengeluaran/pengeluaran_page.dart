@@ -2,14 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../core/models/enums.dart';
 import '../../core/utils/currency.dart';
 import '../../core/utils/date_time.dart';
+import '../../shared/widgets/access_denied_state.dart';
 
 class PengeluaranPage extends ConsumerWidget {
   const PengeluaranPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.read(authRepositoryProvider).currentSession;
+    if (!(session?.role.hasPermission(AppPermission.pengeluaran) ?? false)) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Pengeluaran')),
+        body: const AccessDeniedState(
+          message: 'Role Anda belum memiliki akses ke menu pengeluaran.',
+        ),
+      );
+    }
+
     final repository = ref.read(expenseRepositoryProvider);
 
     Future<void> showAddDialog() async {

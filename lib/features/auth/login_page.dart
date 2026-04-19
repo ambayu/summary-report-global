@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/providers.dart';
 import '../../app/router/route_names.dart';
 import '../../core/models/enums.dart';
+import '../../shared/widgets/brand_avatar.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -15,9 +16,9 @@ class LoginPage extends ConsumerStatefulWidget {
 
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController(text: 'kasir');
+  final _nameController = TextEditingController(text: 'owner');
   final _passwordController = TextEditingController(text: '123456');
-  UserRole _role = UserRole.kasir;
+  UserRole _role = UserRole.owner;
   bool _loading = false;
 
   @override
@@ -61,8 +62,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     return ValueListenableBuilder(
       valueListenable: settingsRepo.listenable,
       builder: (context, box, child) {
-        final brandName = settingsRepo.settings.cafeName;
-        final logoText = _brandInitial(brandName);
+        final settings = settingsRepo.settings;
+        final brandName = settings.cafeName;
 
         return Scaffold(
           body: SafeArea(
@@ -79,7 +80,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            CircleAvatar(radius: 22, child: Text(logoText)),
+                            BrandAvatar(
+                              brandName: brandName,
+                              logoBase64: settings.logoBase64,
+                              radius: 22,
+                            ),
                             const SizedBox(height: 10),
                             Text(
                               brandName,
@@ -172,20 +177,5 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         );
       },
     );
-  }
-
-  String _brandInitial(String brandName) {
-    final text = brandName.trim();
-    if (text.isEmpty) return 'SC';
-
-    final parts = text.split(RegExp(r'\s+')).where((item) => item.isNotEmpty);
-    if (parts.isEmpty) return 'SC';
-    if (parts.length == 1) {
-      final word = parts.first;
-      return word.length >= 2
-          ? word.substring(0, 2).toUpperCase()
-          : word.toUpperCase();
-    }
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 }

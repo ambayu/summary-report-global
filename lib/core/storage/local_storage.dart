@@ -66,6 +66,7 @@ class LocalStorage {
     if (settingsBox.get('default') == null) {
       await settingsBox.put('default', {
         'cafeName': 'Summary Cafe',
+        'logoBase64': null,
         'taxPercent': 10,
         'servicePercent': 5,
         'activePayments': [

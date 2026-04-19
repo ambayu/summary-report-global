@@ -7,6 +7,8 @@ import 'dart:io';
 import '../../app/providers.dart';
 import '../../core/models/enums.dart';
 import '../../core/utils/currency.dart';
+import '../../core/utils/export_file_helper.dart';
+import '../../shared/widgets/access_denied_state.dart';
 import '../../shared/widgets/kpi_card.dart';
 
 class LaporanPage extends ConsumerStatefulWidget {
@@ -26,6 +28,16 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.read(authRepositoryProvider).currentSession;
+    if (!(session?.role.hasPermission(AppPermission.laporan) ?? false)) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Laporan')),
+        body: const AccessDeniedState(
+          message: 'Role Anda belum memiliki akses ke halaman laporan.',
+        ),
+      );
+    }
+
     final txRepo = ref.read(transactionRepositoryProvider);
     final expenseRepo = ref.read(expenseRepositoryProvider);
 
@@ -411,19 +423,19 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
           ? 'laporan_$timestamp.xlsx'
           : 'laporan_${_selectedYear}_$timestamp.xlsx';
 
-      final savePath = await FilePicker.platform.saveFile(
+      final savePath = await ExportFileHelper.saveBytes(
         dialogTitle: 'Simpan XLSX Laporan',
         fileName: defaultName,
-        type: FileType.custom,
-        allowedExtensions: ['xlsx'],
+        allowedExtensions: const ['xlsx'],
         bytes: bytes,
       );
 
       if (savePath == null) return;
       if (!mounted) return;
-      final infoPath = savePath.isEmpty ? defaultName : savePath;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export XLSX berhasil: $infoPath')),
+      await ExportFileHelper.promptOpenFile(
+        context,
+        filePath: savePath,
+        successMessage: 'File XLSX laporan berhasil disimpan di:\n$savePath',
       );
     } catch (_) {
       if (!mounted) return;
