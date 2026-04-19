@@ -183,9 +183,10 @@ class TransactionRepository {
       final price = _parseNumber(cols[priceIndex]);
       if (price <= 0) continue;
 
-      final tax = taxIndex >= 0 && cols.length > taxIndex
-          ? _parseNumber(cols[taxIndex])
-          : price * 0.10;
+      final tax = _normalizeImportedTax(
+        price: price,
+        rawTax: taxIndex >= 0 && cols.length > taxIndex ? cols[taxIndex] : '',
+      );
       final category = categoryIndex >= 0 && cols.length > categoryIndex
           ? cols[categoryIndex]
           : 'Umum';
@@ -270,7 +271,7 @@ class TransactionRepository {
       final price = _parseNumber(priceRaw);
       if (price <= 0) continue;
 
-      final tax = taxRaw.isEmpty ? price * 0.10 : _parseNumber(taxRaw);
+      final tax = _normalizeImportedTax(price: price, rawTax: taxRaw);
       final taxPercent = price == 0 ? 0.0 : (tax / price) * 100;
       final category = categoryRaw.trim().isEmpty ? 'Umum' : categoryRaw.trim();
 
@@ -495,6 +496,26 @@ class TransactionRepository {
         .replaceAll(RegExp(r'[^0-9,.-]'), '')
         .replaceAll(',', '.');
     return double.tryParse(normalized) ?? 0;
+  }
+
+  double _normalizeImportedTax({
+    required double price,
+    required String rawTax,
+  }) {
+    if (price <= 0) return 0;
+
+    final parsedTax = _parseNumber(rawTax);
+    if (rawTax.trim().isEmpty || parsedTax <= 0) {
+      return price * 0.10;
+    }
+
+    // Guard against broken imports where the tax cell is read as the same
+    // nominal value as price, which would double the total in the app.
+    if (parsedTax >= price) {
+      return price * 0.10;
+    }
+
+    return parsedTax;
   }
 
   String _formatDate(DateTime date) {

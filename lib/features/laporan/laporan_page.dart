@@ -37,45 +37,11 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
           builder: (context, box2, child2) {
             final now = DateTime.now();
             final tx = txRepo.getAll().where((item) {
-              if (_selectedYear != null &&
-                  item.createdAt.year != _selectedYear) {
-                return false;
-              }
-              if (!_isWithinRange(item.createdAt, _dateRange)) return false;
-
-              if (_period == 'hari') {
-                return item.createdAt.year == now.year &&
-                    item.createdAt.month == now.month &&
-                    item.createdAt.day == now.day;
-              }
-
-              if (_period == 'minggu') {
-                return now.difference(item.createdAt).inDays <= 7;
-              }
-
-              return item.createdAt.year == now.year &&
-                  item.createdAt.month == now.month;
+              return _matchesReportFilter(item.createdAt, now);
             }).toList();
 
             final ex = expenseRepo.getAll().where((item) {
-              if (_selectedYear != null &&
-                  item.createdAt.year != _selectedYear) {
-                return false;
-              }
-              if (!_isWithinRange(item.createdAt, _dateRange)) return false;
-
-              if (_period == 'hari') {
-                return item.createdAt.year == now.year &&
-                    item.createdAt.month == now.month &&
-                    item.createdAt.day == now.day;
-              }
-
-              if (_period == 'minggu') {
-                return now.difference(item.createdAt).inDays <= 7;
-              }
-
-              return item.createdAt.year == now.year &&
-                  item.createdAt.month == now.month;
+              return _matchesReportFilter(item.createdAt, now);
             }).toList();
 
             final omzet = tx.fold<double>(
@@ -311,6 +277,31 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
     if (date.isBefore(start)) return false;
     if (date.isAfter(end)) return false;
     return true;
+  }
+
+  bool _matchesReportFilter(DateTime date, DateTime now) {
+    if (_selectedYear != null && date.year != _selectedYear) {
+      return false;
+    }
+    if (!_isWithinRange(date, _dateRange)) return false;
+
+    final hasExplicitFilter = _selectedYear != null || _dateRange != null;
+    if (hasExplicitFilter) return true;
+
+    if (_period == 'hari') {
+      return date.year == now.year &&
+          date.month == now.month &&
+          date.day == now.day;
+    }
+
+    if (_period == 'minggu') {
+      final startOfToday = DateTime(now.year, now.month, now.day);
+      final startOfDate = DateTime(date.year, date.month, date.day);
+      final diff = startOfToday.difference(startOfDate).inDays;
+      return diff >= 0 && diff <= 7;
+    }
+
+    return date.year == now.year && date.month == now.month;
   }
 
   String _fmtDate(DateTime value) {
