@@ -6,6 +6,8 @@ class AppTransaction {
     required this.id,
     required this.orderNo,
     required this.tableNo,
+    this.customerId,
+    required this.customerName,
     required this.cashierName,
     required this.cashierRole,
     required this.items,
@@ -22,6 +24,8 @@ class AppTransaction {
   final String id;
   final String orderNo;
   final String tableNo;
+  final String? customerId;
+  final String customerName;
   final String cashierName;
   final UserRole cashierRole;
   final List<TransactionItem> items;
@@ -51,6 +55,8 @@ class AppTransaction {
       id: id,
       orderNo: orderNo,
       tableNo: tableNo,
+      customerId: customerId,
+      customerName: customerName,
       cashierName: cashierName,
       cashierRole: cashierRole,
       items: items,
@@ -70,6 +76,8 @@ class AppTransaction {
       'id': id,
       'orderNo': orderNo,
       'tableNo': tableNo,
+      'customerId': customerId,
+      'customerName': customerName,
       'cashierName': cashierName,
       'cashierRole': cashierRole.name,
       'items': items.map((item) => item.toMap()).toList(),
@@ -91,6 +99,8 @@ class AppTransaction {
       id: map['id']?.toString() ?? '',
       orderNo: map['orderNo']?.toString() ?? '',
       tableNo: map['tableNo']?.toString() ?? '-',
+      customerId: map['customerId']?.toString(),
+      customerName: map['customerName']?.toString() ?? 'Umum',
       cashierName: map['cashierName']?.toString() ?? '-',
       cashierRole: UserRole.values.firstWhere(
         (role) => role.name == map['cashierRole'],

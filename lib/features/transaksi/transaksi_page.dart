@@ -1,8 +1,9 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
-import 'dart:io';
 
 import '../../app/providers.dart';
 import '../../core/models/enums.dart';
@@ -150,7 +151,7 @@ class _TransaksiPageState extends ConsumerState<TransaksiPage> {
                     onTap: () => context.push('/transaksi/${tx.id}'),
                     title: Text('${tx.orderNo} - Meja ${tx.tableNo}'),
                     subtitle: Text(
-                      '${formatDateTime(tx.createdAt)}\n${tx.paymentMethod.label}',
+                      '${formatDateTime(tx.createdAt)}\n${tx.paymentMethod.label} | ${tx.customerName}',
                     ),
                     isThreeLine: true,
                     trailing: Column(
@@ -203,14 +204,15 @@ class _TransaksiPageState extends ConsumerState<TransaksiPage> {
         fileName: 'transaksi_filter_$now.csv',
         type: FileType.custom,
         allowedExtensions: ['csv'],
+        bytes: Uint8List.fromList(utf8.encode(csv)),
       );
 
       if (savePath == null) return;
-      await File(savePath).writeAsString(csv);
       if (!mounted) return;
+      final infoPath = savePath.isEmpty ? 'lokasi terpilih' : savePath;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Export berhasil: $savePath')));
+      ).showSnackBar(SnackBar(content: Text('Export berhasil: $infoPath')));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

@@ -19,6 +19,7 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
   final _discountController = TextEditingController(text: '0');
   final Map<String, int> _qtyMap = {};
 
+  String? _selectedCustomerId;
   PaymentMethod _paymentMethod = PaymentMethod.cash;
   TransactionStatus _status = TransactionStatus.lunas;
   bool _saving = false;
@@ -33,12 +34,17 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
   @override
   Widget build(BuildContext context) {
     final productRepo = ref.read(productRepositoryProvider);
+    final customerRepo = ref.read(customerRepositoryProvider);
     final txRepo = ref.read(transactionRepositoryProvider);
     final authRepo = ref.read(authRepositoryProvider);
     final settingsRepo = ref.read(settingsRepositoryProvider);
 
     final settings = settingsRepo.settings;
     final products = productRepo.getAvailable();
+    final customers = customerRepo.getAll();
+    final selectedCustomer = _selectedCustomerId == null
+        ? null
+        : customers.where((item) => item.id == _selectedCustomerId).firstOrNull;
 
     final selectedProducts = products
         .where((product) => (_qtyMap[product.id] ?? 0) > 0)
@@ -86,6 +92,8 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
       setState(() => _saving = true);
       final created = await txRepo.create(
         tableNo: _tableController.text,
+        customerId: selectedCustomer?.id,
+        customerName: selectedCustomer?.name,
         items: items,
         discountPercent: discountPercent,
         taxPercent: settings.taxPercent,
@@ -110,6 +118,29 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
               labelText: 'Nomor meja / order',
               prefixIcon: Icon(Icons.table_restaurant_outlined),
             ),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String?>(
+            initialValue: _selectedCustomerId,
+            decoration: const InputDecoration(
+              labelText: 'Pelanggan',
+              prefixIcon: Icon(Icons.groups_outlined),
+            ),
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('Pelanggan Umum'),
+              ),
+              ...customers.map(
+                (customer) => DropdownMenuItem<String?>(
+                  value: customer.id,
+                  child: Text('${customer.name} - ${customer.phone}'),
+                ),
+              ),
+            ],
+            onChanged: (value) {
+              setState(() => _selectedCustomerId = value);
+            },
           ),
           const SizedBox(height: 12),
           TextField(
@@ -227,6 +258,7 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _line('Subtotal', formatCurrency(subtotal)),
+                  _line('Pelanggan', selectedCustomer?.name ?? 'Pelanggan Umum'),
                   _line('Diskon', '- ${formatCurrency(discountAmount)}'),
                   _line(
                     'Pajak (${settings.taxPercent.toStringAsFixed(0)}%)',

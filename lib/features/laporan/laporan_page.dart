@@ -420,34 +420,19 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
           ? 'laporan_$timestamp.xlsx'
           : 'laporan_${_selectedYear}_$timestamp.xlsx';
 
-      String? savePath;
-      if (Platform.isAndroid || Platform.isIOS) {
-        final directory = await FilePicker.platform.getDirectoryPath(
-          dialogTitle: 'Pilih folder simpan XLSX',
-        );
-        if (directory != null && directory.isNotEmpty) {
-          savePath = '$directory/$defaultName';
-        }
-      } else {
-        savePath = await FilePicker.platform.saveFile(
-          dialogTitle: 'Simpan XLSX Laporan',
-          fileName: defaultName,
-          type: FileType.custom,
-          allowedExtensions: ['xlsx'],
-        );
-      }
+      final savePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Simpan XLSX Laporan',
+        fileName: defaultName,
+        type: FileType.custom,
+        allowedExtensions: ['xlsx'],
+        bytes: bytes,
+      );
 
       if (savePath == null) return;
-      if (!savePath.toLowerCase().endsWith('.xlsx')) {
-        savePath = '$savePath.xlsx';
-      }
-
-      final file = File(savePath);
-      await file.parent.create(recursive: true);
-      await file.writeAsBytes(bytes, flush: true);
       if (!mounted) return;
+      final infoPath = savePath.isEmpty ? defaultName : savePath;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export XLSX berhasil: $savePath')),
+        SnackBar(content: Text('Export XLSX berhasil: $infoPath')),
       );
     } catch (_) {
       if (!mounted) return;

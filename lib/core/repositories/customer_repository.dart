@@ -32,8 +32,25 @@ class CustomerRepository {
     return customer;
   }
 
+  Future<void> update({
+    required String id,
+    required String name,
+    required String phone,
+  }) async {
+    final current = LocalStorage.customersBox.get(id);
+    if (current == null) return;
+
+    final customer = Customer.fromMap(current);
+    final next = customer.copyWith(name: name.trim(), phone: phone.trim());
+    await LocalStorage.customersBox.put(id, next.toMap());
+  }
+
   Future<void> upsert(Customer customer) async {
     await LocalStorage.customersBox.put(customer.id, customer.toMap());
+  }
+
+  Future<void> delete(String customerId) async {
+    await LocalStorage.customersBox.delete(customerId);
   }
 
   Future<void> addPurchase(String customerId, double amount) async {

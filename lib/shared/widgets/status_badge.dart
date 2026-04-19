@@ -15,17 +15,17 @@ class StatusBadge extends StatelessWidget {
 
     switch (status) {
       case TransactionStatus.lunas:
-        bg = AppColors.success.withOpacity(0.12);
+        bg = AppColors.success.withValues(alpha: 0.12);
         fg = AppColors.success;
       case TransactionStatus.pending:
-        bg = AppColors.primaryRed.withOpacity(0.12);
+        bg = AppColors.primaryRed.withValues(alpha: 0.12);
         fg = AppColors.primaryRed;
       case TransactionStatus.splitBill:
-        bg = AppColors.warning.withOpacity(0.15);
+        bg = AppColors.warning.withValues(alpha: 0.15);
         fg = AppColors.warning;
       case TransactionStatus.refund:
       case TransactionStatus.batal:
-        bg = AppColors.danger.withOpacity(0.12);
+        bg = AppColors.danger.withValues(alpha: 0.12);
         fg = AppColors.danger;
     }
 

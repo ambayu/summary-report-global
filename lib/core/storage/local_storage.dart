@@ -5,6 +5,7 @@ class LocalStorage {
   static const _uuid = Uuid();
 
   static late Box<Map> sessionBox;
+  static late Box<Map> usersBox;
   static late Box<Map> productsBox;
   static late Box<Map> customersBox;
   static late Box<Map> transactionsBox;
@@ -15,6 +16,7 @@ class LocalStorage {
     await Hive.initFlutter();
 
     sessionBox = await Hive.openBox<Map>('session');
+    usersBox = await Hive.openBox<Map>('users');
     productsBox = await Hive.openBox<Map>('products');
     customersBox = await Hive.openBox<Map>('customers');
     transactionsBox = await Hive.openBox<Map>('transactions');
@@ -27,6 +29,40 @@ class LocalStorage {
   static bool get hasSession => sessionBox.get('current') != null;
 
   static Future<void> _seedData() async {
+    if (usersBox.isEmpty) {
+      final now = DateTime.now().toIso8601String();
+      final users = [
+        {
+          'id': _uuid.v4(),
+          'username': 'owner',
+          'password': '123456',
+          'role': 'owner',
+          'createdAt': now,
+          'updatedAt': now,
+        },
+        {
+          'id': _uuid.v4(),
+          'username': 'admin',
+          'password': '123456',
+          'role': 'admin',
+          'createdAt': now,
+          'updatedAt': now,
+        },
+        {
+          'id': _uuid.v4(),
+          'username': 'kasir',
+          'password': '123456',
+          'role': 'kasir',
+          'createdAt': now,
+          'updatedAt': now,
+        },
+      ];
+
+      for (final user in users) {
+        await usersBox.put(user['username'] as String, user);
+      }
+    }
+
     if (settingsBox.get('default') == null) {
       await settingsBox.put('default', {
         'cafeName': 'Summary Cafe',

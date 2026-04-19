@@ -96,6 +96,7 @@ class TransactionDetailPage extends ConsumerWidget {
                         ],
                       ),
                       const SizedBox(height: 8),
+                      Text('Pelanggan: ${tx.customerName}'),
                       Text(
                         'Kasir: ${tx.cashierName} (${tx.cashierRole.label})',
                       ),

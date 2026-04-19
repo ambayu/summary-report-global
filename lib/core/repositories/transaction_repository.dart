@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/app_transaction.dart';
+import '../models/customer.dart';
 import '../models/enums.dart';
 import '../models/transaction_item.dart';
 import '../models/user_session.dart';
@@ -30,6 +31,8 @@ class TransactionRepository {
 
   Future<AppTransaction> create({
     required String tableNo,
+    String? customerId,
+    String? customerName,
     required List<TransactionItem> items,
     required double discountPercent,
     required double taxPercent,
@@ -43,6 +46,10 @@ class TransactionRepository {
       id: _uuid.v4(),
       orderNo: 'ORD-${now.millisecondsSinceEpoch.toString().substring(7)}',
       tableNo: tableNo.trim().isEmpty ? '-' : tableNo.trim(),
+      customerId: customerId,
+      customerName: customerName?.trim().isNotEmpty == true
+          ? customerName!.trim()
+          : 'Umum',
       cashierName: cashier.name,
       cashierRole: cashier.role,
       items: items,
@@ -63,6 +70,7 @@ class TransactionRepository {
     );
 
     await LocalStorage.transactionsBox.put(adjusted.id, adjusted.toMap());
+    await _syncCustomerStats();
     return adjusted;
   }
 
@@ -81,10 +89,12 @@ class TransactionRepository {
     );
 
     await LocalStorage.transactionsBox.put(id, next.toMap());
+    await _syncCustomerStats();
   }
 
   Future<void> delete(String id) async {
     await LocalStorage.transactionsBox.delete(id);
+    await _syncCustomerStats();
   }
 
   Future<int> deleteByMonth({required int year, required int month}) async {
@@ -97,6 +107,7 @@ class TransactionRepository {
     for (final tx in targets) {
       await LocalStorage.transactionsBox.delete(tx.id);
     }
+    await _syncCustomerStats();
     return targets.length;
   }
 
@@ -126,6 +137,7 @@ class TransactionRepository {
     for (final tx in targets) {
       await LocalStorage.transactionsBox.delete(tx.id);
     }
+    await _syncCustomerStats();
     return targets.length;
   }
 
@@ -184,6 +196,8 @@ class TransactionRepository {
         orderNo:
             'IMP-${createdAt.millisecondsSinceEpoch.toString().substring(6)}',
         tableNo: category.isEmpty ? '-' : category,
+        customerId: null,
+        customerName: 'Umum',
         cashierName: 'Import CSV',
         cashierRole: UserRole.admin,
         items: [
@@ -209,6 +223,7 @@ class TransactionRepository {
       imported += 1;
     }
 
+    await _syncCustomerStats();
     return imported;
   }
 
@@ -264,6 +279,8 @@ class TransactionRepository {
         orderNo:
             'IMP-${createdAt.millisecondsSinceEpoch.toString().substring(6)}',
         tableNo: category,
+        customerId: null,
+        customerName: 'Umum',
         cashierName: 'Import XLSX',
         cashierRole: UserRole.admin,
         items: [
@@ -289,6 +306,7 @@ class TransactionRepository {
       imported += 1;
     }
 
+    await _syncCustomerStats();
     return imported;
   }
 
@@ -362,6 +380,9 @@ class TransactionRepository {
   }) {
     final excel = Excel.createExcel();
     final sheet = excel['Laporan'];
+    var totalHarga = 0.0;
+    var totalPajak = 0.0;
+
     sheet.appendRow([
       TextCellValue('Tanggal'),
       TextCellValue('Kategori'),
@@ -383,6 +404,8 @@ class TransactionRepository {
         final lineTax = tx.subtotal <= 0
             ? 0.0
             : tx.taxAmount * (item.total / tx.subtotal);
+        totalHarga += item.total;
+        totalPajak += lineTax;
 
         sheet.appendRow([
           TextCellValue(_formatDate(tx.createdAt)),
@@ -393,6 +416,28 @@ class TransactionRepository {
         ]);
       }
     }
+
+    sheet.appendRow([
+      TextCellValue(''),
+      TextCellValue(''),
+      TextCellValue(''),
+      TextCellValue(''),
+      TextCellValue(''),
+    ]);
+    sheet.appendRow([
+      TextCellValue('TOTAL PER KOLOM'),
+      TextCellValue(''),
+      TextCellValue(''),
+      DoubleCellValue(totalHarga),
+      DoubleCellValue(totalPajak),
+    ]);
+    sheet.appendRow([
+      TextCellValue('TOTAL SELURUHNYA'),
+      TextCellValue(''),
+      TextCellValue('Harga + Pajak'),
+      DoubleCellValue(totalHarga + totalPajak),
+      TextCellValue(''),
+    ]);
 
     final bytes = excel.save();
     return Uint8List.fromList(bytes ?? <int>[]);
@@ -492,5 +537,31 @@ class TransactionRepository {
     if (start != null && date.isBefore(start)) return false;
     if (end != null && date.isAfter(end)) return false;
     return true;
+  }
+
+  Future<void> _syncCustomerStats() async {
+    final customers = LocalStorage.customersBox.values
+        .map(Customer.fromMap)
+        .toList();
+    if (customers.isEmpty) return;
+
+    final transactions = getAll();
+    for (final customer in customers) {
+      final paidTransactions = transactions.where((tx) {
+        return tx.customerId == customer.id && tx.status == TransactionStatus.lunas;
+      });
+
+      final totalPurchase = paidTransactions.fold<double>(
+        0,
+        (sum, tx) => sum + tx.grandTotal,
+      );
+      final points = totalPurchase ~/ 10000;
+      final next = customer.copyWith(
+        totalPurchase: totalPurchase,
+        points: points,
+        isFavorite: totalPurchase > 500000,
+      );
+      await LocalStorage.customersBox.put(customer.id, next.toMap());
+    }
   }
 }
