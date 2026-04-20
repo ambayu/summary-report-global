@@ -1,6 +1,8 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/app_settings.dart';
+
 class LocalStorage {
   static const _uuid = Uuid();
 
@@ -64,11 +66,11 @@ class LocalStorage {
     }
 
     if (settingsBox.get('default') == null) {
+      final defaultRoles = AppSettings.defaultRoles();
       await settingsBox.put('default', {
         'cafeName': 'Summary Cafe',
         'logoBase64': null,
         'taxPercent': 10,
-        'servicePercent': 5,
         'activePayments': [
           'cash',
           'qris',
@@ -76,6 +78,7 @@ class LocalStorage {
           'ewallet',
           'transfer',
         ],
+        'roles': defaultRoles.map((role) => role.toMap()).toList(),
       });
     }
 

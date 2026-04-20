@@ -50,7 +50,9 @@ class ReceiptPrinting {
       'dd MMM yyyy, HH:mm',
       'id_ID',
     ).format(transaction.createdAt);
-    final logoBytes = settings.logoBase64 == null || settings.logoBase64!.isEmpty
+    final cashierName = transaction.cashierName.trim();
+    final logoBytes =
+        settings.logoBase64 == null || settings.logoBase64!.isEmpty
         ? null
         : base64Decode(settings.logoBase64!);
 
@@ -90,10 +92,12 @@ class ReceiptPrinting {
             pw.SizedBox(height: 12),
             _sectionLine(),
             _infoRow('Order', transaction.orderNo),
-            _infoRow('Meja', transaction.tableNo),
+            _infoRow('Jenis', transaction.orderType),
+            if (transaction.orderType != 'Take Away')
+              _infoRow('Meja', transaction.tableNo),
             _infoRow('Tanggal', dateText),
             _infoRow('Pelanggan', transaction.customerName),
-            _infoRow('Kasir', transaction.cashierName),
+            if (cashierName.isNotEmpty) _infoRow('Kasir', cashierName),
             _infoRow('Metode', transaction.paymentMethod.label),
             _infoRow('Status', transaction.status.label),
             _sectionLine(),
@@ -127,7 +131,7 @@ class ReceiptPrinting {
                     ),
                     pw.SizedBox(height: 2),
                     pw.Text(
-                      '${item.qty} x ${currency.format(item.unitPrice)}',
+                      '${item.qty} x ${currency.format(item.unitPrice)}${item.variant.trim().isEmpty || item.variant == '-' ? '' : ' • ${item.variant}'}',
                       style: const pw.TextStyle(fontSize: 9),
                     ),
                   ],
@@ -143,10 +147,6 @@ class ReceiptPrinting {
             _totalRow(
               'Pajak (${transaction.taxPercent.toStringAsFixed(0)}%)',
               currency.format(transaction.taxAmount),
-            ),
-            _totalRow(
-              'Service (${transaction.servicePercent.toStringAsFixed(0)}%)',
-              currency.format(transaction.serviceAmount),
             ),
             _sectionLine(),
             _totalRow(

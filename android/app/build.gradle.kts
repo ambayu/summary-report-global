@@ -6,6 +6,13 @@ plugins {
 }
 
 android {
+    val configuredAppId =
+        System.getenv("APP_ID")?.takeIf { it.isNotBlank() }
+            ?: "com.example.summary_global"
+    val configuredAppName =
+        System.getenv("APP_NAME")?.takeIf { it.isNotBlank() }
+            ?: "Summary Global"
+
     namespace = "com.example.summary_global"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
@@ -20,14 +27,12 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.summary_global"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = configuredAppId
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        resValue("string", "app_name", configuredAppName)
     }
 
     buildTypes {

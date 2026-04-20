@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
+import '../../core/models/app_settings.dart';
 import '../../core/models/enums.dart';
 import '../../core/models/product.dart';
 import '../../core/models/transaction_item.dart';
@@ -19,11 +20,13 @@ class NewTransactionPage extends ConsumerStatefulWidget {
 class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
   final _tableController = TextEditingController();
   final _discountController = TextEditingController(text: '0');
-  final Map<String, int> _qtyMap = {};
+  final List<_DraftOrderLine> _selectedItems = [];
+  int _draftCounter = 0;
 
   String? _selectedCustomerId;
   PaymentMethod _paymentMethod = PaymentMethod.cash;
   TransactionStatus _status = TransactionStatus.lunas;
+  String _orderType = 'Dine In';
   String _selectedCategory = 'Semua';
   String _searchQuery = '';
   String _menuMode = 'visual';
@@ -76,13 +79,9 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
       return matchesCategory && matchesQuery;
     }).toList();
 
-    final selectedProducts = products
-        .where((product) => (_qtyMap[product.id] ?? 0) > 0)
-        .toList();
-
-    final subtotal = selectedProducts.fold<double>(
+    final subtotal = _selectedItems.fold<double>(
       0,
-      (sum, product) => sum + product.sellPrice * (_qtyMap[product.id] ?? 0),
+      (sum, item) => sum + item.product.sellPrice,
     );
     final rawDiscountValue = _parseDiscountInput();
     final discountAmount = _fullDiscount
@@ -99,9 +98,14 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
     final isWideScreen =
         screenSize.width >= 960 ||
         (screenSize.width >= 760 && screenSize.width > screenSize.height);
-
+    final availablePayments = settings.activePayments.isEmpty
+        ? PaymentMethod.values.toList()
+        : settings.activePayments;
+    final effectivePaymentMethod = availablePayments.contains(_paymentMethod)
+        ? _paymentMethod
+        : availablePayments.first;
     Future<void> submit() async {
-      if (selectedProducts.isEmpty) {
+      if (_selectedItems.isEmpty) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Pilih minimal 1 produk')));
@@ -116,13 +120,14 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
         return;
       }
 
-      final items = selectedProducts
+      final items = _selectedItems
           .map(
-            (product) => TransactionItem(
-              productId: product.id,
-              productName: product.name,
-              qty: _qtyMap[product.id] ?? 1,
-              unitPrice: product.sellPrice,
+            (item) => TransactionItem(
+              productId: item.product.id,
+              productName: item.product.name,
+              qty: 1,
+              unitPrice: item.product.sellPrice,
+              variant: item.variant,
               note: '',
             ),
           )
@@ -132,13 +137,13 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
       try {
         final created = await txRepo.create(
           tableNo: _tableController.text,
+          orderType: _orderType,
           customerId: selectedCustomer?.id,
           customerName: selectedCustomer?.name,
           items: items,
           discountPercent: discountPercent,
           taxPercent: settings.taxPercent,
-          servicePercent: 0,
-          paymentMethod: _paymentMethod,
+          paymentMethod: effectivePaymentMethod,
           status: _status,
           cashier: session,
         );
@@ -156,7 +161,9 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
       }
     }
 
-    final submitAction = _saving ? null : () => submit();
+    final submitAction = _saving || _selectedItems.isEmpty
+        ? null
+        : () => submit();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Transaksi Baru')),
@@ -172,25 +179,25 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
               : constraints.maxWidth - 32;
           final orderSections = [
             _buildOrderDetailsCard(customers),
-            const SizedBox(height: 12),
-            _buildDiscountCard(subtotal),
-            const SizedBox(height: 12),
-            _buildPaymentCard(settings),
-            const SizedBox(height: 12),
-            _buildSummaryCard(
-              selectedCustomerName: selectedCustomer?.name,
-              subtotal: subtotal,
-              discountAmount: discountAmount,
-              discountPercent: discountPercent,
-              taxPercent: settings.taxPercent,
-              taxAmount: taxAmount,
-              grandTotal: grandTotal,
-            ),
             if (isSplitLayout) ...[
+              const SizedBox(height: 12),
+              _buildDiscountCard(subtotal),
+              const SizedBox(height: 12),
+              _buildPaymentCard(settings),
+              const SizedBox(height: 12),
+              _buildSummaryCard(
+                selectedCustomerName: selectedCustomer?.name,
+                subtotal: subtotal,
+                discountAmount: discountAmount,
+                discountPercent: discountPercent,
+                taxPercent: settings.taxPercent,
+                taxAmount: taxAmount,
+                grandTotal: grandTotal,
+              ),
               const SizedBox(height: 12),
               _buildCheckoutPanel(
                 grandTotal: grandTotal,
-                menuCount: selectedProducts.length,
+                menuCount: _selectedItems.length,
                 onSubmit: submitAction,
               ),
             ],
@@ -199,9 +206,25 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
             _buildMenuCard(
               categories: categories,
               filteredProducts: filteredProducts,
-              selectedCount: selectedProducts.length,
+              selectedCount: _selectedItems.length,
               availableWidth: menuPanelWidth,
             ),
+            if (!isSplitLayout) ...[
+              const SizedBox(height: 12),
+              _buildDiscountCard(subtotal),
+              const SizedBox(height: 12),
+              _buildPaymentCard(settings),
+              const SizedBox(height: 12),
+              _buildSummaryCard(
+                selectedCustomerName: selectedCustomer?.name,
+                subtotal: subtotal,
+                discountAmount: discountAmount,
+                discountPercent: discountPercent,
+                taxPercent: settings.taxPercent,
+                taxAmount: taxAmount,
+                grandTotal: grandTotal,
+              ),
+            ],
           ];
 
           if (isSplitLayout) {
@@ -234,10 +257,10 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
       bottomNavigationBar: isWideScreen
           ? null
           : SafeArea(
-              minimum: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+              minimum: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               child: _buildCheckoutPanel(
                 grandTotal: grandTotal,
-                menuCount: selectedProducts.length,
+                menuCount: _selectedItems.length,
                 onSubmit: submitAction,
               ),
             ),
@@ -278,7 +301,27 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
     });
   }
 
+  void _addProduct(Product product, String variant) {
+    setState(() {
+      _selectedItems.add(
+        _DraftOrderLine(
+          id: 'draft-${_draftCounter++}',
+          product: product,
+          variant: variant,
+        ),
+      );
+    });
+  }
+
+  int _selectedCountForProduct(String productId) {
+    return _selectedItems.where((item) => item.product.id == productId).length;
+  }
+
   Widget _buildOrderDetailsCard(List<dynamic> customers) {
+    final tableLabel = _orderType == 'Take Away'
+        ? 'Nomor order / catatan'
+        : 'Nomor meja';
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -292,10 +335,38 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
             const SizedBox(height: 12),
             TextField(
               controller: _tableController,
-              decoration: const InputDecoration(
-                labelText: 'Nomor meja / order',
-                prefixIcon: Icon(Icons.table_restaurant_outlined),
+              decoration: InputDecoration(
+                labelText: tableLabel,
+                prefixIcon: Icon(
+                  _orderType == 'Take Away'
+                      ? Icons.shopping_bag_outlined
+                      : Icons.table_restaurant_outlined,
+                ),
               ),
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: 'Dine In',
+                  icon: Icon(Icons.table_restaurant_outlined),
+                  label: Text('Dine In'),
+                ),
+                ButtonSegment(
+                  value: 'Take Away',
+                  icon: Icon(Icons.shopping_bag_outlined),
+                  label: Text('Take Away'),
+                ),
+              ],
+              selected: {_orderType},
+              onSelectionChanged: (selection) {
+                setState(() {
+                  _orderType = selection.first;
+                  if (_orderType == 'Take Away') {
+                    _tableController.clear();
+                  }
+                });
+              },
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String?>(
@@ -405,7 +476,14 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
     );
   }
 
-  Widget _buildPaymentCard(dynamic settings) {
+  Widget _buildPaymentCard(AppSettings settings) {
+    final availablePayments = settings.activePayments.isEmpty
+        ? PaymentMethod.values.toList()
+        : settings.activePayments;
+    final selectedPayment = availablePayments.contains(_paymentMethod)
+        ? _paymentMethod
+        : availablePayments.first;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -415,14 +493,14 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
             Text('Pembayaran', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
             DropdownButtonFormField<PaymentMethod>(
-              initialValue: _paymentMethod,
+              initialValue: selectedPayment,
               decoration: const InputDecoration(
                 labelText: 'Metode pembayaran',
                 prefixIcon: Icon(Icons.payments_outlined),
               ),
-              items: settings.activePayments
+              items: availablePayments
                   .map<DropdownMenuItem<PaymentMethod>>(
-                    (payment) => DropdownMenuItem(
+                    (PaymentMethod payment) => DropdownMenuItem<PaymentMethod>(
                       value: payment,
                       child: Text(payment.label),
                     ),
@@ -470,6 +548,8 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
     required int selectedCount,
     required double availableWidth,
   }) {
+    final compactToggle = availableWidth < 420;
+    final compactVariantButtons = availableWidth < 420;
     final gridCount = availableWidth >= 1200
         ? 4
         : availableWidth >= 840
@@ -497,22 +577,22 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '$selectedCount menu dipilih',
+                      '$selectedCount item dipilih',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
                 SegmentedButton<String>(
-                  segments: const [
+                  segments: [
                     ButtonSegment(
                       value: 'visual',
-                      icon: Icon(Icons.grid_view_rounded),
-                      label: Text('Gambar'),
+                      icon: const Icon(Icons.grid_view_rounded),
+                      label: compactToggle ? null : const Text('Gambar'),
                     ),
                     ButtonSegment(
                       value: 'text',
-                      icon: Icon(Icons.view_list_rounded),
-                      label: Text('Teks'),
+                      icon: const Icon(Icons.view_list_rounded),
+                      label: compactToggle ? null : const Text('Teks'),
                     ),
                   ],
                   selected: {_menuMode},
@@ -582,31 +662,26 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
                   crossAxisCount: gridCount,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
-                  childAspectRatio: availableWidth >= 840 ? 0.9 : 0.78,
+                  childAspectRatio: availableWidth >= 840
+                      ? 0.92
+                      : availableWidth >= 420
+                      ? 0.74
+                      : 0.62,
                 ),
                 itemBuilder: (context, index) {
                   final product = filteredProducts[index];
                   return _VisualProductCard(
                     product: product,
-                    qty: _qtyMap[product.id] ?? 0,
-                    onAdd: () {
-                      setState(
-                        () => _qtyMap[product.id] =
-                            (_qtyMap[product.id] ?? 0) + 1,
-                      );
-                    },
-                    onRemove: () {
-                      final currentQty = _qtyMap[product.id] ?? 0;
-                      if (currentQty == 0) return;
-                      setState(() => _qtyMap[product.id] = currentQty - 1);
-                    },
+                    selectedCount: _selectedCountForProduct(product.id),
+                    onAddVariant: (variant) => _addProduct(product, variant),
+                    compactVariantButtons: compactVariantButtons,
                   );
                 },
               )
             else
               Column(
                 children: filteredProducts.map((product) {
-                  final qty = _qtyMap[product.id] ?? 0;
+                  final selectedCount = _selectedCountForProduct(product.id);
                   return Card(
                     margin: const EdgeInsets.only(bottom: 10),
                     child: ListTile(
@@ -619,31 +694,48 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
                         imageBase64: product.imageBase64,
                       ),
                       title: Text(product.name),
-                      subtitle: Text(
-                        '${product.category} - ${formatCurrency(product.sellPrice)}',
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${product.category} - ${formatCurrency(product.sellPrice)}',
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: transactionVariants.map((variant) {
+                              return FilledButton.tonal(
+                                onPressed: () => _addProduct(product, variant),
+                                child: Text(variant),
+                              );
+                            }).toList(),
+                          ),
+                        ],
                       ),
-                      trailing: SizedBox(
-                        width: 120,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            IconButton(
-                              onPressed: () {
-                                if (qty == 0) return;
-                                setState(() => _qtyMap[product.id] = qty - 1);
-                              },
-                              icon: const Icon(Icons.remove_circle_outline),
-                            ),
-                            Text('$qty'),
-                            IconButton(
-                              onPressed: () {
-                                setState(() => _qtyMap[product.id] = qty + 1);
-                              },
-                              icon: const Icon(Icons.add_circle_outline),
-                            ),
-                          ],
-                        ),
-                      ),
+                      isThreeLine: false,
+                      trailing: selectedCount > 0
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                '$selectedCount',
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            )
+                          : null,
+                      minVerticalPadding: 10,
                     ),
                   );
                 }).toList(),
@@ -668,6 +760,7 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
         : _discountMode == 'nominal'
         ? 'Diskon Nominal'
         : 'Diskon (${_formatNumberInput(discountPercent)}%)';
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
       child: Padding(
@@ -677,7 +770,70 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
           children: [
             Text('Ringkasan', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.45,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: colorScheme.outlineVariant),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Menu Dipesan',
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: colorScheme.onSurface,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (_selectedItems.isEmpty)
+                      Text(
+                        'Belum ada menu dipilih.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      )
+                    else
+                      ..._selectedItems.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final item = entry.value;
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            bottom: index == _selectedItems.length - 1 ? 0 : 8,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${index + 1}. ${item.product.name} (${item.variant})',
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(color: colorScheme.onSurface),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                formatCurrency(item.product.sellPrice),
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: colorScheme.onSurface,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             _line('Subtotal', formatCurrency(subtotal)),
+            _line('Jenis Pesanan', _orderType),
             _line('Pelanggan', selectedCustomerName ?? 'Pelanggan Umum'),
             _line(discountLabel, '- ${formatCurrency(discountAmount)}'),
             _line(
@@ -747,7 +903,7 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    '$menuCount menu',
+                    '$menuCount item',
                     style: TextStyle(
                       color: colorScheme.onPrimary,
                       fontWeight: FontWeight.w700,
@@ -790,18 +946,30 @@ class _NewTransactionPageState extends ConsumerState<NewTransactionPage> {
   }
 }
 
+class _DraftOrderLine {
+  const _DraftOrderLine({
+    required this.id,
+    required this.product,
+    required this.variant,
+  });
+
+  final String id;
+  final Product product;
+  final String variant;
+}
+
 class _VisualProductCard extends StatelessWidget {
   const _VisualProductCard({
     required this.product,
-    required this.qty,
-    required this.onAdd,
-    required this.onRemove,
+    required this.selectedCount,
+    required this.onAddVariant,
+    required this.compactVariantButtons,
   });
 
   final Product product;
-  final int qty;
-  final VoidCallback onAdd;
-  final VoidCallback onRemove;
+  final int selectedCount;
+  final ValueChanged<String> onAddVariant;
+  final bool compactVariantButtons;
 
   @override
   Widget build(BuildContext context) {
@@ -840,6 +1008,28 @@ class _VisualProductCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (selectedCount > 0)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '$selectedCount',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -864,25 +1054,26 @@ class _VisualProductCard extends StatelessWidget {
                   ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: qty == 0 ? null : onRemove,
-                      icon: const Icon(Icons.remove_circle_outline),
-                    ),
-                    Expanded(
-                      child: Center(
-                        child: Text(
-                          '$qty',
-                          style: Theme.of(context).textTheme.titleMedium,
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: transactionVariants.map((variant) {
+                    return FilledButton.tonal(
+                      style: FilledButton.styleFrom(
+                        minimumSize: Size(compactVariantButtons ? 40 : 0, 32),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: compactVariantButtons ? 10 : 12,
+                          vertical: 0,
                         ),
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                    ),
-                    IconButton(
-                      onPressed: onAdd,
-                      icon: const Icon(Icons.add_circle_outline),
-                    ),
-                  ],
+                      onPressed: () => onAddVariant(variant),
+                      child: compactVariantButtons
+                          ? Icon(_variantIcon(variant), size: 18)
+                          : Text(variant),
+                    );
+                  }).toList(),
                 ),
               ],
             ),
@@ -890,5 +1081,16 @@ class _VisualProductCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  IconData _variantIcon(String variant) {
+    switch (variant) {
+      case 'Hot':
+        return Icons.local_fire_department_rounded;
+      case 'Cold':
+        return Icons.ac_unit_rounded;
+      default:
+        return Icons.local_cafe_outlined;
+    }
   }
 }

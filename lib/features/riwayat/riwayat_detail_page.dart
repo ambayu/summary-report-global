@@ -20,6 +20,8 @@ class RiwayatDetailPage extends ConsumerWidget {
       );
     }
 
+    final cashierName = tx.cashierName.trim();
+
     return Scaffold(
       appBar: AppBar(title: const Text('Detail Riwayat')),
       body: ListView(
@@ -28,7 +30,7 @@ class RiwayatDetailPage extends ConsumerWidget {
           Text(tx.orderNo, style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           Text('Tanggal: ${formatDateTime(tx.createdAt)}'),
-          Text('Kasir: ${tx.cashierName}'),
+          if (cashierName.isNotEmpty) Text('Kasir: $cashierName'),
           Text('Metode: ${tx.paymentMethod.label}'),
           const SizedBox(height: 12),
           ...tx.items.map(

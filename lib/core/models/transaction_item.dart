@@ -4,6 +4,7 @@ class TransactionItem {
     required this.productName,
     required this.qty,
     required this.unitPrice,
+    required this.variant,
     required this.note,
   });
 
@@ -11,6 +12,7 @@ class TransactionItem {
   final String productName;
   final int qty;
   final double unitPrice;
+  final String variant;
   final String note;
 
   double get total => unitPrice * qty;
@@ -21,6 +23,7 @@ class TransactionItem {
       'productName': productName,
       'qty': qty,
       'unitPrice': unitPrice,
+      'variant': variant,
       'note': note,
     };
   }
@@ -31,6 +34,7 @@ class TransactionItem {
       productName: map['productName']?.toString() ?? '',
       qty: (map['qty'] as num?)?.toInt() ?? 1,
       unitPrice: (map['unitPrice'] as num?)?.toDouble() ?? 0,
+      variant: map['variant']?.toString() ?? '-',
       note: map['note']?.toString() ?? '',
     );
   }

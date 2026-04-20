@@ -13,7 +13,8 @@ class PengeluaranPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.read(authRepositoryProvider).currentSession;
-    if (!(session?.role.hasPermission(AppPermission.pengeluaran) ?? false)) {
+    final settings = ref.read(settingsRepositoryProvider).settings;
+    if (!settings.hasPermission(session?.roleKey, AppPermission.pengeluaran)) {
       return Scaffold(
         appBar: AppBar(title: const Text('Pengeluaran')),
         body: const AccessDeniedState(

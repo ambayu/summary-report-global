@@ -12,6 +12,7 @@ import '../storage/local_storage.dart';
 
 class TransactionRepository {
   static const _uuid = Uuid();
+  static const _salesRecapSheetName = 'Rekap Penjualan';
 
   ValueListenable<Box<Map>> get listenable =>
       LocalStorage.transactionsBox.listenable();
@@ -31,12 +32,12 @@ class TransactionRepository {
 
   Future<AppTransaction> create({
     required String tableNo,
+    required String orderType,
     String? customerId,
     String? customerName,
     required List<TransactionItem> items,
     required double discountPercent,
     required double taxPercent,
-    required double servicePercent,
     required PaymentMethod paymentMethod,
     required TransactionStatus status,
     required UserSession cashier,
@@ -45,17 +46,20 @@ class TransactionRepository {
     final tx = AppTransaction(
       id: _uuid.v4(),
       orderNo: 'ORD-${now.millisecondsSinceEpoch.toString().substring(7)}',
-      tableNo: tableNo.trim().isEmpty ? '-' : tableNo.trim(),
+      tableNo: orderType == 'Take Away'
+          ? '-'
+          : (tableNo.trim().isEmpty ? '-' : tableNo.trim()),
+      orderType: orderType,
       customerId: customerId,
       customerName: customerName?.trim().isNotEmpty == true
           ? customerName!.trim()
           : 'Umum',
       cashierName: cashier.name,
-      cashierRole: cashier.role,
+      cashierRoleKey: cashier.roleKey,
+      cashierRoleLabel: cashier.roleLabel,
       items: items,
       discountPercent: discountPercent,
       taxPercent: taxPercent,
-      servicePercent: servicePercent,
       paymentMethod: paymentMethod,
       status: status,
       paidAmount: status == TransactionStatus.lunas
@@ -146,28 +150,23 @@ class TransactionRepository {
     if (rows.length <= 1) return 0;
 
     final delimiter = _detectDelimiter(rows.first);
-    final headers = rows.first
-        .split(delimiter)
-        .map((value) => value.trim().toLowerCase())
-        .toList();
-
-    final dateIndex = headers.indexWhere(
-      (header) => header.contains('tanggal') || header == 'date',
-    );
-    final categoryIndex = headers.indexWhere(
-      (header) => header.contains('kategori') || header == 'category',
-    );
-    final itemIndex = headers.indexWhere(
-      (header) => header.contains('item') || header.contains('produk'),
-    );
-    final priceIndex = headers.indexWhere(
-      (header) => header.contains('harga') || header.contains('price'),
-    );
-    final taxIndex = headers.indexWhere((header) => header.contains('pajak'));
+    final headers = rows.first.split(delimiter).map(_normalizeHeader).toList();
+    final indexes = _resolveImportIndexes(headers);
+    final dateIndex = indexes.date;
+    final categoryIndex = indexes.category;
+    final orderIndex = indexes.order;
+    final itemIndex = indexes.item;
+    final variantIndex = indexes.variant;
+    final qtyIndex = indexes.qty;
+    final discountIndex = indexes.discount;
+    final orderTypeIndex = indexes.orderType;
+    final subtotalIndex = indexes.subtotal;
+    final priceIndex = indexes.price;
+    final taxIndex = indexes.tax;
 
     if (dateIndex < 0 || itemIndex < 0 || priceIndex < 0) return 0;
 
-    var imported = 0;
+    final groupedRows = <String, List<_ImportedLine>>{};
 
     for (final row in rows.skip(1)) {
       if (row.trim().isEmpty) continue;
@@ -180,50 +179,56 @@ class TransactionRepository {
       final itemName = cols[itemIndex];
       if (itemName.isEmpty) continue;
 
+      final qtyRaw = qtyIndex >= 0 && cols.length > qtyIndex
+          ? cols[qtyIndex]
+          : '1';
+      final qty = _parseNumber(qtyRaw).round().clamp(1, 999999);
       final price = _parseNumber(cols[priceIndex]);
       if (price <= 0) continue;
 
+      final lineSubtotal = subtotalIndex >= 0 && cols.length > subtotalIndex
+          ? _parseNumber(cols[subtotalIndex])
+          : price * qty;
+      final discount = discountIndex >= 0 && cols.length > discountIndex
+          ? _parseNumber(cols[discountIndex])
+          : ((price * qty) - lineSubtotal).clamp(0, price * qty).toDouble();
       final tax = _normalizeImportedTax(
-        price: price,
+        price: lineSubtotal > 0 ? lineSubtotal : price * qty,
         rawTax: taxIndex >= 0 && cols.length > taxIndex ? cols[taxIndex] : '',
       );
       final category = categoryIndex >= 0 && cols.length > categoryIndex
           ? cols[categoryIndex]
           : 'Umum';
-      final taxPercent = price == 0 ? 0.0 : (tax / price) * 100;
+      final orderNo = orderIndex >= 0 && cols.length > orderIndex
+          ? cols[orderIndex].trim()
+          : 'IMP-${createdAt.millisecondsSinceEpoch.toString().substring(6)}';
+      final orderType = orderTypeIndex >= 0 && cols.length > orderTypeIndex
+          ? cols[orderTypeIndex].trim()
+          : '-';
+      final variant = variantIndex >= 0 && cols.length > variantIndex
+          ? cols[variantIndex].trim()
+          : '-';
+      final key = '${_formatDate(createdAt)}|$orderNo|$orderType';
 
-      final tx = AppTransaction(
-        id: _uuid.v4(),
-        orderNo:
-            'IMP-${createdAt.millisecondsSinceEpoch.toString().substring(6)}',
-        tableNo: category.isEmpty ? '-' : category,
-        customerId: null,
-        customerName: 'Umum',
-        cashierName: 'Import CSV',
-        cashierRole: UserRole.admin,
-        items: [
-          TransactionItem(
-            productId: '',
-            productName: itemName,
-            qty: 1,
-            unitPrice: price,
-            note: 'Imported from CSV',
-          ),
-        ],
-        discountPercent: 0,
-        taxPercent: taxPercent,
-        servicePercent: 0,
-        paymentMethod: PaymentMethod.cash,
-        status: TransactionStatus.lunas,
-        paidAmount: price + tax,
-        createdAt: createdAt,
-        updatedAt: createdAt,
-      );
-
-      await LocalStorage.transactionsBox.put(tx.id, tx.toMap());
-      imported += 1;
+      groupedRows
+          .putIfAbsent(key, () => [])
+          .add(
+            _ImportedLine(
+              createdAt: createdAt,
+              orderNo: orderNo,
+              category: category.trim().isEmpty ? 'Umum' : category.trim(),
+              productName: itemName.trim(),
+              variant: variant,
+              qty: qty,
+              unitPrice: price,
+              discountAmount: discount,
+              taxAmount: tax,
+              orderType: orderType,
+            ),
+          );
     }
 
+    final imported = await _persistImportedGroups(groupedRows);
     await _syncCustomerStats();
     return imported;
   }
@@ -232,30 +237,29 @@ class TransactionRepository {
     final excel = Excel.decodeBytes(bytes);
     if (excel.tables.isEmpty) return 0;
 
-    final sheet = excel.tables.values.first;
+    final sheet = _findImportSheet(excel);
+    if (sheet == null) return 0;
     if (sheet.rows.length <= 1) return 0;
 
     final headers = sheet.rows.first
-        .map((cell) => _excelCellText(cell).toLowerCase())
+        .map((cell) => _normalizeHeader(_excelCellText(cell)))
         .toList();
-
-    final dateIndex = headers.indexWhere(
-      (header) => header.contains('tanggal') || header == 'date',
-    );
-    final categoryIndex = headers.indexWhere(
-      (header) => header.contains('kategori') || header == 'category',
-    );
-    final itemIndex = headers.indexWhere(
-      (header) => header.contains('item') || header.contains('produk'),
-    );
-    final priceIndex = headers.indexWhere(
-      (header) => header.contains('harga') || header.contains('price'),
-    );
-    final taxIndex = headers.indexWhere((header) => header.contains('pajak'));
+    final indexes = _resolveImportIndexes(headers);
+    final dateIndex = indexes.date;
+    final categoryIndex = indexes.category;
+    final orderIndex = indexes.order;
+    final itemIndex = indexes.item;
+    final variantIndex = indexes.variant;
+    final qtyIndex = indexes.qty;
+    final discountIndex = indexes.discount;
+    final orderTypeIndex = indexes.orderType;
+    final subtotalIndex = indexes.subtotal;
+    final priceIndex = indexes.price;
+    final taxIndex = indexes.tax;
 
     if (dateIndex < 0 || itemIndex < 0 || priceIndex < 0) return 0;
 
-    var imported = 0;
+    final groupedRows = <String, List<_ImportedLine>>{};
 
     for (final row in sheet.rows.skip(1)) {
       final dateRaw = _excelCellByIndex(row, dateIndex);
@@ -263,50 +267,61 @@ class TransactionRepository {
       final priceRaw = _excelCellByIndex(row, priceIndex);
       final categoryRaw = _excelCellByIndex(row, categoryIndex);
       final taxRaw = _excelCellByIndex(row, taxIndex);
+      final orderRaw = _excelCellByIndex(row, orderIndex);
+      final variantRaw = _excelCellByIndex(row, variantIndex);
+      final qtyRaw = _excelCellByIndex(row, qtyIndex);
+      final discountRaw = _excelCellByIndex(row, discountIndex);
+      final orderTypeRaw = _excelCellByIndex(row, orderTypeIndex);
+      final subtotalRaw = _excelCellByIndex(row, subtotalIndex);
 
-      final createdAt = _parseDate(dateRaw);
+      final createdAt = _parseExcelDateCell(
+        row,
+        dateIndex,
+        fallbackRaw: dateRaw,
+      );
       if (createdAt == null) continue;
       if (itemName.trim().isEmpty) continue;
 
+      final qty = _parseNumber(qtyRaw).round().clamp(1, 999999);
       final price = _parseNumber(priceRaw);
       if (price <= 0) continue;
 
-      final tax = _normalizeImportedTax(price: price, rawTax: taxRaw);
-      final taxPercent = price == 0 ? 0.0 : (tax / price) * 100;
-      final category = categoryRaw.trim().isEmpty ? 'Umum' : categoryRaw.trim();
-
-      final tx = AppTransaction(
-        id: _uuid.v4(),
-        orderNo:
-            'IMP-${createdAt.millisecondsSinceEpoch.toString().substring(6)}',
-        tableNo: category,
-        customerId: null,
-        customerName: 'Umum',
-        cashierName: 'Import XLSX',
-        cashierRole: UserRole.admin,
-        items: [
-          TransactionItem(
-            productId: '',
-            productName: itemName.trim(),
-            qty: 1,
-            unitPrice: price,
-            note: 'Imported from XLSX',
-          ),
-        ],
-        discountPercent: 0,
-        taxPercent: taxPercent,
-        servicePercent: 0,
-        paymentMethod: PaymentMethod.cash,
-        status: TransactionStatus.lunas,
-        paidAmount: price + tax,
-        createdAt: createdAt,
-        updatedAt: createdAt,
+      final lineSubtotal = subtotalRaw.trim().isEmpty
+          ? price * qty
+          : _parseNumber(subtotalRaw);
+      final discount = discountRaw.trim().isEmpty
+          ? ((price * qty) - lineSubtotal).clamp(0, price * qty).toDouble()
+          : _parseNumber(discountRaw);
+      final tax = _normalizeImportedTax(
+        price: lineSubtotal > 0 ? lineSubtotal : price * qty,
+        rawTax: taxRaw,
       );
+      final category = categoryRaw.trim().isEmpty ? 'Umum' : categoryRaw.trim();
+      final orderNo = orderRaw.trim().isEmpty
+          ? 'IMP-${createdAt.millisecondsSinceEpoch.toString().substring(6)}'
+          : orderRaw.trim();
+      final orderType = orderTypeRaw.trim().isEmpty ? '-' : orderTypeRaw.trim();
+      final key = '${_formatDate(createdAt)}|$orderNo|$orderType';
 
-      await LocalStorage.transactionsBox.put(tx.id, tx.toMap());
-      imported += 1;
+      groupedRows
+          .putIfAbsent(key, () => [])
+          .add(
+            _ImportedLine(
+              createdAt: createdAt,
+              orderNo: orderNo,
+              category: category,
+              productName: itemName.trim(),
+              variant: variantRaw.trim(),
+              qty: qty,
+              unitPrice: price,
+              discountAmount: discount,
+              taxAmount: tax,
+              orderType: orderType,
+            ),
+          );
     }
 
+    final imported = await _persistImportedGroups(groupedRows);
     await _syncCustomerStats();
     return imported;
   }
@@ -346,7 +361,7 @@ class TransactionRepository {
     DateTime? endDate,
   }) {
     final buffer = StringBuffer(
-      'Tanggal,Order,Meja,Status,Metode,Item,Qty,Harga,Subtotal,Pajak,Service,Total\n',
+      'Tanggal,Order,Meja,Status,Metode,Item,Qty,Harga,Subtotal,Pajak,Total\n',
     );
 
     for (final tx in getAll().reversed) {
@@ -365,7 +380,6 @@ class TransactionRepository {
           '${_formatNumber(item.unitPrice)},'
           '${_formatNumber(item.total)},'
           '${_formatNumber(tx.taxAmount)},'
-          '${_formatNumber(tx.serviceAmount)},'
           '${_formatNumber(tx.grandTotal)}',
         );
       }
@@ -378,46 +392,20 @@ class TransactionRepository {
     TransactionStatus? status,
     DateTime? startDate,
     DateTime? endDate,
-    String sheetName = 'Transaksi',
   }) {
-    final excel = Excel.createExcel();
-    final sheet = excel[sheetName];
+    final excel = _createWorkbook('Rekap Penjualan');
+    final sheet = excel['Rekap Penjualan'];
+    var rowIndex = 0;
 
-    sheet.appendRow([
-      TextCellValue('Tanggal'),
-      TextCellValue('Order'),
-      TextCellValue('Meja'),
-      TextCellValue('Status'),
-      TextCellValue('Metode'),
-      TextCellValue('Item'),
-      TextCellValue('Qty'),
-      TextCellValue('Harga'),
-      TextCellValue('Subtotal'),
-      TextCellValue('Pajak'),
-      TextCellValue('Service'),
-      TextCellValue('Total'),
-    ]);
+    _appendSalesRecapHeader(sheet, rowIndex);
+    rowIndex += 1;
 
     for (final tx in getAll().reversed) {
       if (status != null && tx.status != status) continue;
       if (!_isWithinRange(tx.createdAt, startDate, endDate)) continue;
+      if (!_shouldIncludeInSalesRecap(tx, requestedStatus: status)) continue;
 
-      for (final item in tx.items) {
-        sheet.appendRow([
-          TextCellValue(_formatDate(tx.createdAt)),
-          TextCellValue(tx.orderNo),
-          TextCellValue(tx.tableNo),
-          TextCellValue(tx.status.label),
-          TextCellValue(tx.paymentMethod.label),
-          TextCellValue(item.productName),
-          IntCellValue(item.qty),
-          DoubleCellValue(item.unitPrice),
-          DoubleCellValue(item.total),
-          DoubleCellValue(tx.taxAmount),
-          DoubleCellValue(tx.serviceAmount),
-          DoubleCellValue(tx.grandTotal),
-        ]);
-      }
+      rowIndex = _appendSalesRecapRows(sheet, tx, rowIndex);
     }
 
     final bytes = excel.save();
@@ -429,66 +417,20 @@ class TransactionRepository {
     DateTime? startDate,
     DateTime? endDate,
   }) {
-    final excel = Excel.createExcel();
-    final sheet = excel['Laporan'];
-    var totalHarga = 0.0;
-    var totalPajak = 0.0;
+    final excel = _createWorkbook('Rekap Penjualan');
+    final sheet = excel['Rekap Penjualan'];
+    var rowIndex = 0;
 
-    sheet.appendRow([
-      TextCellValue('Tanggal'),
-      TextCellValue('Kategori'),
-      TextCellValue('Item'),
-      TextCellValue('Harga'),
-      TextCellValue('Pajak 10%'),
-    ]);
+    _appendSalesRecapHeader(sheet, rowIndex);
+    rowIndex += 1;
 
     for (final tx in getAll().reversed) {
       if (year != null && tx.createdAt.year != year) continue;
       if (!_isWithinRange(tx.createdAt, startDate, endDate)) continue;
-      if (tx.status == TransactionStatus.batal) continue;
+      if (!_shouldIncludeInSalesRecap(tx)) continue;
 
-      for (final item in tx.items) {
-        final map = LocalStorage.productsBox.get(item.productId);
-        final category = map == null
-            ? (tx.tableNo == '-' ? 'Umum' : tx.tableNo)
-            : (map['category']?.toString() ?? 'Umum');
-        final lineTax = tx.subtotal <= 0
-            ? 0.0
-            : tx.taxAmount * (item.total / tx.subtotal);
-        totalHarga += item.total;
-        totalPajak += lineTax;
-
-        sheet.appendRow([
-          TextCellValue(_formatDate(tx.createdAt)),
-          TextCellValue(category),
-          TextCellValue(item.productName),
-          DoubleCellValue(item.total),
-          DoubleCellValue(lineTax),
-        ]);
-      }
+      rowIndex = _appendSalesRecapRows(sheet, tx, rowIndex);
     }
-
-    sheet.appendRow([
-      TextCellValue(''),
-      TextCellValue(''),
-      TextCellValue(''),
-      TextCellValue(''),
-      TextCellValue(''),
-    ]);
-    sheet.appendRow([
-      TextCellValue('TOTAL PER KOLOM'),
-      TextCellValue(''),
-      TextCellValue(''),
-      DoubleCellValue(totalHarga),
-      DoubleCellValue(totalPajak),
-    ]);
-    sheet.appendRow([
-      TextCellValue('TOTAL SELURUHNYA'),
-      TextCellValue(''),
-      TextCellValue('Harga + Pajak'),
-      DoubleCellValue(totalHarga + totalPajak),
-      TextCellValue(''),
-    ]);
 
     final bytes = excel.save();
     return Uint8List.fromList(bytes ?? <int>[]);
@@ -522,11 +464,32 @@ class TransactionRepository {
     final iso = DateTime.tryParse(text);
     if (iso != null) return iso;
 
+    final numeric = double.tryParse(text.replaceAll(',', '.'));
+    if (numeric != null && numeric > 20000 && numeric < 80000) {
+      final wholeDays = numeric.floor();
+      final seconds = ((numeric - wholeDays) * Duration.secondsPerDay).round();
+      return DateTime(
+        1899,
+        12,
+        30,
+      ).add(Duration(days: wholeDays, seconds: seconds));
+    }
+
     final slash = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})$').firstMatch(text);
     if (slash != null) {
       final day = int.parse(slash.group(1)!);
       final month = int.parse(slash.group(2)!);
       final year = int.parse(slash.group(3)!);
+      return DateTime(year, month, day);
+    }
+
+    final dashDayFirst = RegExp(
+      r'^(\d{1,2})-(\d{1,2})-(\d{4})$',
+    ).firstMatch(text);
+    if (dashDayFirst != null) {
+      final day = int.parse(dashDayFirst.group(1)!);
+      final month = int.parse(dashDayFirst.group(2)!);
+      final year = int.parse(dashDayFirst.group(3)!);
       return DateTime(year, month, day);
     }
 
@@ -579,6 +542,392 @@ class TransactionRepository {
     return value.toStringAsFixed(2);
   }
 
+  Sheet? _findImportSheet(Excel excel) {
+    for (final entry in excel.tables.entries) {
+      if (_normalizeHeader(entry.key) ==
+          _normalizeHeader(_salesRecapSheetName)) {
+        return entry.value;
+      }
+    }
+
+    for (final sheet in excel.tables.values) {
+      if (sheet.rows.isEmpty) continue;
+      final headers = sheet.rows.first
+          .map((cell) => _normalizeHeader(_excelCellText(cell)))
+          .toList();
+      final indexes = _resolveImportIndexes(headers);
+      if (indexes.date >= 0 && indexes.item >= 0 && indexes.price >= 0) {
+        return sheet;
+      }
+    }
+
+    return null;
+  }
+
+  _ImportIndexes _resolveImportIndexes(List<String> headers) {
+    return _ImportIndexes(
+      date: _findHeaderIndex(headers, const ['tanggal', 'date']),
+      category: _findHeaderIndex(headers, const ['kategori', 'category']),
+      order: _findHeaderIndex(headers, const [
+        'kode struk',
+        'order',
+        'kode order',
+      ]),
+      item: _findHeaderIndex(headers, const [
+        'barang',
+        'item',
+        'produk',
+        'menu',
+      ]),
+      variant: _findHeaderIndex(headers, const ['varian', 'variant']),
+      qty: _findHeaderIndex(headers, const ['qty', 'jumlah']),
+      discount: _findHeaderIndex(headers, const ['diskon', 'discount']),
+      orderType: _findHeaderIndex(headers, const [
+        'jenis pesanan',
+        'order type',
+        'meja',
+      ]),
+      subtotal: _findHeaderIndex(headers, const ['sub total', 'subtotal']),
+      price: _findHeaderIndex(headers, const ['harga', 'price']),
+      tax: _findHeaderIndex(headers, const ['pajak', 'tax']),
+    );
+  }
+
+  int _findHeaderIndex(List<String> headers, List<String> aliases) {
+    return headers.indexWhere((header) {
+      for (final alias in aliases) {
+        final normalizedAlias = _normalizeHeader(alias);
+        if (header == normalizedAlias || header.contains(normalizedAlias)) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }
+
+  String _normalizeHeader(String raw) {
+    return raw
+        .replaceAll('\uFEFF', '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim()
+        .toLowerCase();
+  }
+
+  Excel _createWorkbook(String sheetName) {
+    final excel = Excel.createExcel();
+    final defaultSheet = excel.getDefaultSheet();
+    if (defaultSheet != null && defaultSheet != sheetName) {
+      excel.rename(defaultSheet, sheetName);
+    }
+    _configureSalesRecapSheet(excel[sheetName]);
+    return excel;
+  }
+
+  void _appendSalesRecapHeader(Sheet sheet, int rowIndex) {
+    sheet.appendRow([
+      TextCellValue('Tanggal'),
+      TextCellValue('Kategori'),
+      TextCellValue('Kode Struk'),
+      TextCellValue('Barang'),
+      TextCellValue('Varian'),
+      TextCellValue('Qty'),
+      TextCellValue('Harga'),
+      TextCellValue('Diskon'),
+      TextCellValue('Jenis Pesanan'),
+      TextCellValue('Sub Total'),
+      TextCellValue('Pajak'),
+    ]);
+    _styleSalesRecapHeader(sheet, rowIndex);
+  }
+
+  int _appendSalesRecapRows(Sheet sheet, AppTransaction tx, int rowIndex) {
+    for (final item in tx.items) {
+      final baseTotal = item.total;
+      final ratio = tx.subtotal <= 0 ? 0.0 : baseTotal / tx.subtotal;
+      final lineDiscount = tx.discountAmount * ratio;
+      final lineTax = tx.taxAmount * ratio;
+      final netSubtotal = baseTotal - lineDiscount;
+
+      sheet.appendRow([
+        TextCellValue(_formatDate(tx.createdAt)),
+        TextCellValue(_resolveCategory(tx, item)),
+        TextCellValue(tx.orderNo),
+        TextCellValue(item.productName),
+        TextCellValue(_resolveVariant(item)),
+        IntCellValue(item.qty),
+        DoubleCellValue(item.unitPrice),
+        DoubleCellValue(lineDiscount),
+        TextCellValue(_resolveOrderType(tx)),
+        DoubleCellValue(netSubtotal),
+        DoubleCellValue(lineTax),
+      ]);
+      _styleSalesRecapDataRow(sheet, rowIndex);
+      rowIndex += 1;
+    }
+    return rowIndex;
+  }
+
+  void _configureSalesRecapSheet(Sheet sheet) {
+    sheet.setDefaultColumnWidth(14);
+    sheet.setColumnWidth(0, 14);
+    sheet.setColumnWidth(1, 16);
+    sheet.setColumnWidth(2, 16);
+    sheet.setColumnWidth(3, 24);
+    sheet.setColumnWidth(4, 14);
+    sheet.setColumnWidth(5, 8);
+    sheet.setColumnWidth(6, 14);
+    sheet.setColumnWidth(7, 14);
+    sheet.setColumnWidth(8, 16);
+    sheet.setColumnWidth(9, 16);
+    sheet.setColumnWidth(10, 14);
+
+    for (var index = 0; index <= 10; index++) {
+      sheet.setColumnAutoFit(index);
+    }
+  }
+
+  void _styleSalesRecapHeader(Sheet sheet, int rowIndex) {
+    sheet.setRowHeight(rowIndex, 24);
+    final style = CellStyle(
+      backgroundColorHex: ExcelColor.fromHexString('FFB3261E'),
+      fontColorHex: ExcelColor.white,
+      bold: true,
+      fontSize: 11,
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      textWrapping: TextWrapping.WrapText,
+      leftBorder: Border(
+        borderStyle: BorderStyle.Thin,
+        borderColorHex: ExcelColor.fromHexString('FF7F1D1D'),
+      ),
+      rightBorder: Border(
+        borderStyle: BorderStyle.Thin,
+        borderColorHex: ExcelColor.fromHexString('FF7F1D1D'),
+      ),
+      topBorder: Border(
+        borderStyle: BorderStyle.Thin,
+        borderColorHex: ExcelColor.fromHexString('FF7F1D1D'),
+      ),
+      bottomBorder: Border(
+        borderStyle: BorderStyle.Thin,
+        borderColorHex: ExcelColor.fromHexString('FF7F1D1D'),
+      ),
+    );
+
+    for (var columnIndex = 0; columnIndex <= 10; columnIndex++) {
+      sheet.updateCell(
+        CellIndex.indexByColumnRow(
+          columnIndex: columnIndex,
+          rowIndex: rowIndex,
+        ),
+        sheet
+            .cell(
+              CellIndex.indexByColumnRow(
+                columnIndex: columnIndex,
+                rowIndex: rowIndex,
+              ),
+            )
+            .value,
+        cellStyle: style,
+      );
+    }
+  }
+
+  void _styleSalesRecapDataRow(Sheet sheet, int rowIndex) {
+    final textStyle = CellStyle(
+      fontSize: 10,
+      verticalAlign: VerticalAlign.Center,
+      textWrapping: TextWrapping.WrapText,
+      leftBorder: Border(
+        borderStyle: BorderStyle.Thin,
+        borderColorHex: ExcelColor.fromHexString('FFE5E7EB'),
+      ),
+      rightBorder: Border(
+        borderStyle: BorderStyle.Thin,
+        borderColorHex: ExcelColor.fromHexString('FFE5E7EB'),
+      ),
+      topBorder: Border(
+        borderStyle: BorderStyle.Thin,
+        borderColorHex: ExcelColor.fromHexString('FFE5E7EB'),
+      ),
+      bottomBorder: Border(
+        borderStyle: BorderStyle.Thin,
+        borderColorHex: ExcelColor.fromHexString('FFE5E7EB'),
+      ),
+    );
+    final centeredStyle = textStyle.copyWith(
+      horizontalAlignVal: HorizontalAlign.Center,
+    );
+    final numericStyle = textStyle.copyWith(
+      horizontalAlignVal: HorizontalAlign.Right,
+    );
+
+    sheet.setRowHeight(rowIndex, 22);
+    for (final columnIndex in [0, 1, 2, 3, 4, 8]) {
+      _updateStyledCell(sheet, rowIndex, columnIndex, textStyle);
+    }
+    _updateStyledCell(sheet, rowIndex, 5, centeredStyle);
+    for (final columnIndex in [6, 7, 9, 10]) {
+      _updateStyledCell(sheet, rowIndex, columnIndex, numericStyle);
+    }
+  }
+
+  void _updateStyledCell(
+    Sheet sheet,
+    int rowIndex,
+    int columnIndex,
+    CellStyle style,
+  ) {
+    final cellIndex = CellIndex.indexByColumnRow(
+      columnIndex: columnIndex,
+      rowIndex: rowIndex,
+    );
+    sheet.updateCell(cellIndex, sheet.cell(cellIndex).value, cellStyle: style);
+  }
+
+  String _resolveCategory(AppTransaction tx, TransactionItem item) {
+    final importedCategory = _importMeta(item.note, 'category');
+    if (importedCategory != null && importedCategory.isNotEmpty) {
+      return importedCategory;
+    }
+
+    final map = LocalStorage.productsBox.get(item.productId);
+    if (map == null) {
+      return tx.tableNo == '-' ? 'Umum' : tx.tableNo;
+    }
+    return map['category']?.toString() ?? 'Umum';
+  }
+
+  String _resolveVariant(TransactionItem item) {
+    final storedVariant = item.variant.trim();
+    if (storedVariant.isNotEmpty && storedVariant != '-') {
+      return storedVariant;
+    }
+
+    final importedVariant = _importMeta(item.note, 'variant');
+    if (importedVariant != null && importedVariant.isNotEmpty) {
+      return importedVariant;
+    }
+
+    final note = item.note.trim();
+    if (note.isEmpty) return '-';
+    if (note.toLowerCase().startsWith('imported from')) return '-';
+    return note;
+  }
+
+  String _resolveOrderType(AppTransaction tx) {
+    final explicit = tx.orderType.trim();
+    if (explicit.isNotEmpty) return explicit;
+    return tx.tableNo == '-' ? 'Take Away' : 'Dine In';
+  }
+
+  Future<int> _persistImportedGroups(
+    Map<String, List<_ImportedLine>> groupedRows,
+  ) async {
+    var imported = 0;
+
+    for (final lines in groupedRows.values) {
+      if (lines.isEmpty) continue;
+
+      final first = lines.first;
+      final grossSubtotal = lines.fold<double>(
+        0,
+        (sum, line) => sum + (line.unitPrice * line.qty),
+      );
+      final discountAmount = lines.fold<double>(
+        0,
+        (sum, line) => sum + line.discountAmount,
+      );
+      final taxable = (grossSubtotal - discountAmount).clamp(
+        0,
+        double.infinity,
+      );
+      final taxAmount = lines.fold<double>(
+        0,
+        (sum, line) => sum + line.taxAmount,
+      );
+      final discountPercent = grossSubtotal <= 0
+          ? 0.0
+          : (discountAmount / grossSubtotal) * 100;
+      final taxPercent = taxable <= 0 ? 0.0 : (taxAmount / taxable) * 100;
+
+      final items = lines
+          .map(
+            (line) => TransactionItem(
+              productId: '',
+              productName: line.productName,
+              qty: line.qty,
+              unitPrice: line.unitPrice,
+              variant: line.variant,
+              note: _buildImportedItemNote(
+                category: line.category,
+                variant: line.variant,
+              ),
+            ),
+          )
+          .toList();
+
+      final tx = AppTransaction(
+        id: _uuid.v4(),
+        orderNo: first.orderNo,
+        tableNo: _tableNoFromOrderType(first.orderType),
+        orderType: first.orderType.trim().isEmpty
+            ? 'Take Away'
+            : first.orderType,
+        customerId: null,
+        customerName: 'Umum',
+        cashierName: '',
+        cashierRoleKey: '',
+        cashierRoleLabel: '',
+        items: items,
+        discountPercent: discountPercent,
+        taxPercent: taxPercent,
+        paymentMethod: PaymentMethod.cash,
+        status: TransactionStatus.lunas,
+        paidAmount: taxable + taxAmount,
+        createdAt: first.createdAt,
+        updatedAt: first.createdAt,
+      );
+
+      await LocalStorage.transactionsBox.put(tx.id, tx.toMap());
+      imported += 1;
+    }
+
+    return imported;
+  }
+
+  String _tableNoFromOrderType(String orderType) {
+    final normalized = orderType.trim().toLowerCase();
+    if (normalized.contains('take away') || normalized.contains('takeaway')) {
+      return '-';
+    }
+    return 'Dine In';
+  }
+
+  String _buildImportedItemNote({
+    required String category,
+    required String variant,
+  }) {
+    final safeCategory = category.trim().isEmpty ? 'Umum' : category.trim();
+    final safeVariant = variant.trim().isEmpty ? '-' : variant.trim();
+    return '__import__|category=$safeCategory|variant=$safeVariant';
+  }
+
+  String? _importMeta(String note, String key) {
+    if (!note.startsWith('__import__|')) return null;
+
+    for (final part in note.split('|').skip(1)) {
+      final separator = part.indexOf('=');
+      if (separator <= 0) continue;
+
+      final currentKey = part.substring(0, separator).trim();
+      if (currentKey != key) continue;
+      return part.substring(separator + 1).trim();
+    }
+
+    return null;
+  }
+
   String _csvCell(String value) {
     final escaped = value.replaceAll('"', '""');
     if (escaped.contains(',') || escaped.contains('"')) {
@@ -590,6 +939,31 @@ class TransactionRepository {
   String _excelCellByIndex(List<Data?> row, int index) {
     if (index < 0 || index >= row.length) return '';
     return _excelCellText(row[index]);
+  }
+
+  DateTime? _parseExcelDateCell(
+    List<Data?> row,
+    int index, {
+    required String fallbackRaw,
+  }) {
+    if (index < 0 || index >= row.length) {
+      return _parseDate(fallbackRaw);
+    }
+
+    final cell = row[index];
+    if (cell?.value == null) {
+      return _parseDate(fallbackRaw);
+    }
+
+    final value = cell!.value;
+    if (value is DateCellValue) {
+      return value.asDateTimeLocal();
+    }
+    if (value is DateTimeCellValue) {
+      return value.asDateTimeLocal();
+    }
+
+    return _parseDate(value.toString());
   }
 
   String _excelCellText(Data? cell) {
@@ -610,6 +984,16 @@ class TransactionRepository {
     return true;
   }
 
+  bool _shouldIncludeInSalesRecap(
+    AppTransaction tx, {
+    TransactionStatus? requestedStatus,
+  }) {
+    if (requestedStatus == TransactionStatus.batal) {
+      return tx.status == TransactionStatus.batal;
+    }
+    return tx.status != TransactionStatus.batal;
+  }
+
   Future<void> _syncCustomerStats() async {
     final customers = LocalStorage.customersBox.values
         .map(Customer.fromMap)
@@ -619,7 +1003,8 @@ class TransactionRepository {
     final transactions = getAll();
     for (final customer in customers) {
       final paidTransactions = transactions.where((tx) {
-        return tx.customerId == customer.id && tx.status == TransactionStatus.lunas;
+        return tx.customerId == customer.id &&
+            tx.status == TransactionStatus.lunas;
       });
 
       final totalPurchase = paidTransactions.fold<double>(
@@ -635,4 +1020,58 @@ class TransactionRepository {
       await LocalStorage.customersBox.put(customer.id, next.toMap());
     }
   }
+}
+
+class _ImportedLine {
+  const _ImportedLine({
+    required this.createdAt,
+    required this.orderNo,
+    required this.category,
+    required this.productName,
+    required this.variant,
+    required this.qty,
+    required this.unitPrice,
+    required this.discountAmount,
+    required this.taxAmount,
+    required this.orderType,
+  });
+
+  final DateTime createdAt;
+  final String orderNo;
+  final String category;
+  final String productName;
+  final String variant;
+  final int qty;
+  final double unitPrice;
+  final double discountAmount;
+  final double taxAmount;
+  final String orderType;
+}
+
+class _ImportIndexes {
+  const _ImportIndexes({
+    required this.date,
+    required this.category,
+    required this.order,
+    required this.item,
+    required this.variant,
+    required this.qty,
+    required this.discount,
+    required this.orderType,
+    required this.subtotal,
+    required this.price,
+    required this.tax,
+  });
+
+  final int date;
+  final int category;
+  final int order;
+  final int item;
+  final int variant;
+  final int qty;
+  final int discount;
+  final int orderType;
+  final int subtotal;
+  final int price;
+  final int tax;
 }

@@ -25,7 +25,8 @@ class _ProdukPageState extends ConsumerState<ProdukPage> {
   @override
   Widget build(BuildContext context) {
     final session = ref.read(authRepositoryProvider).currentSession;
-    if (!(session?.role.hasPermission(AppPermission.produk) ?? false)) {
+    final settings = ref.read(settingsRepositoryProvider).settings;
+    if (!settings.hasPermission(session?.roleKey, AppPermission.produk)) {
       return Scaffold(
         appBar: AppBar(title: const Text('Menu Produk')),
         body: const AccessDeniedState(
@@ -41,7 +42,7 @@ class _ProdukPageState extends ConsumerState<ProdukPage> {
         title: const Text('Menu Produk'),
         actions: [
           IconButton(
-            onPressed: () => _showProductDialog(context, repository),
+            onPressed: () => _openProductEditor(context, repository),
             icon: const Icon(Icons.add_circle_outline),
           ),
         ],
@@ -84,7 +85,7 @@ class _ProdukPageState extends ConsumerState<ProdukPage> {
                         const SizedBox(height: 10),
                         FilledButton.icon(
                           onPressed: () =>
-                              _showProductDialog(context, repository),
+                              _openProductEditor(context, repository),
                           icon: const Icon(Icons.add),
                           label: const Text('Tambah Menu'),
                         ),
@@ -101,7 +102,7 @@ class _ProdukPageState extends ConsumerState<ProdukPage> {
                         product.copyWith(available: !product.available),
                       );
                     },
-                    onEdit: () => _showProductDialog(
+                    onEdit: () => _openProductEditor(
                       context,
                       repository,
                       existing: product,
@@ -115,247 +116,24 @@ class _ProdukPageState extends ConsumerState<ProdukPage> {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showProductDialog(context, repository),
+        onPressed: () => _openProductEditor(context, repository),
         child: const Icon(Icons.add),
       ),
     );
   }
 
-  Future<void> _showProductDialog(
+  Future<void> _openProductEditor(
     BuildContext context,
     dynamic repository, {
     Product? existing,
   }) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final isEdit = existing != null;
-    final nameController = TextEditingController(text: existing?.name ?? '');
-    final categoryController = TextEditingController(
-      text: existing?.category ?? '',
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            _ProductEditorPage(repository: repository, existing: existing),
+        fullscreenDialog: true,
+      ),
     );
-    final priceController = TextEditingController(
-      text: existing == null ? '' : existing.sellPrice.toStringAsFixed(0),
-    );
-    final costController = TextEditingController(
-      text: existing == null ? '0' : existing.costPrice.toStringAsFixed(0),
-    );
-    final stockController = TextEditingController(
-      text: existing == null ? '0' : existing.stock.toString(),
-    );
-    var imageBase64 = existing?.imageBase64;
-    var saving = false;
-    var dialogClosed = false;
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text(isEdit ? 'Edit Produk' : 'Tambah Produk'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ProductThumbnail(
-                      name: nameController.text.isEmpty
-                          ? 'Menu Baru'
-                          : nameController.text,
-                      imageBase64: imageBase64,
-                      width: 96,
-                      height: 96,
-                      radius: 20,
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: saving
-                              ? null
-                              : () async {
-                                  try {
-                                    final file = await FilePicker.platform
-                                        .pickFiles(
-                                          type: FileType.image,
-                                          allowMultiple: false,
-                                          withData: false,
-                                        );
-                                    if (file == null ||
-                                        !dialogContext.mounted) {
-                                      return;
-                                    }
-
-                                    final picked = file.files.single;
-                                    final bytes =
-                                        picked.bytes ??
-                                        (picked.path == null
-                                            ? null
-                                            : await File(
-                                                picked.path!,
-                                              ).readAsBytes());
-                                    if (bytes == null || bytes.isEmpty) {
-                                      messenger.showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Gambar tidak bisa dibaca. Coba pilih file lain.',
-                                          ),
-                                        ),
-                                      );
-                                      return;
-                                    }
-
-                                    if (!dialogContext.mounted) return;
-                                    setDialogState(
-                                      () => imageBase64 = base64Encode(bytes),
-                                    );
-                                  } catch (_) {
-                                    if (!dialogContext.mounted) return;
-                                    messenger.showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Upload gambar gagal. Coba ulangi lagi.',
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                },
-                          icon: const Icon(Icons.image_outlined),
-                          label: const Text('Upload Gambar'),
-                        ),
-                        if (imageBase64 != null)
-                          OutlinedButton.icon(
-                            onPressed: saving
-                                ? null
-                                : () =>
-                                      setDialogState(() => imageBase64 = null),
-                            icon: const Icon(Icons.delete_outline),
-                            label: const Text('Hapus Gambar'),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Nama produk',
-                      ),
-                      onChanged: (_) => setDialogState(() {}),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: categoryController,
-                      decoration: const InputDecoration(labelText: 'Kategori'),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: priceController,
-                      decoration: const InputDecoration(
-                        labelText: 'Harga jual',
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: costController,
-                      decoration: const InputDecoration(
-                        labelText: 'Harga modal',
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: stockController,
-                      decoration: const InputDecoration(labelText: 'Stok'),
-                      keyboardType: TextInputType.number,
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: saving
-                      ? null
-                      : () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Batal'),
-                ),
-                FilledButton(
-                  onPressed: saving
-                      ? null
-                      : () async {
-                          if (nameController.text.trim().isEmpty) {
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text('Nama produk wajib diisi'),
-                              ),
-                            );
-                            return;
-                          }
-
-                          setDialogState(() => saving = true);
-                          try {
-                            if (existing == null) {
-                              await repository.create(
-                                name: nameController.text,
-                                category: categoryController.text,
-                                imageBase64: imageBase64,
-                                sellPrice:
-                                    double.tryParse(priceController.text) ?? 0,
-                                costPrice:
-                                    double.tryParse(costController.text) ?? 0,
-                                stock: int.tryParse(stockController.text) ?? 0,
-                              );
-                            } else {
-                              await repository.update(
-                                existing.copyWith(
-                                  name: nameController.text.trim(),
-                                  category:
-                                      categoryController.text.trim().isEmpty
-                                      ? 'Umum'
-                                      : categoryController.text.trim(),
-                                  imageBase64: imageBase64,
-                                  sellPrice:
-                                      double.tryParse(priceController.text) ??
-                                      0,
-                                  costPrice:
-                                      double.tryParse(costController.text) ?? 0,
-                                  stock:
-                                      int.tryParse(stockController.text) ?? 0,
-                                ),
-                              );
-                            }
-                            if (dialogContext.mounted) {
-                              dialogClosed = true;
-                              Navigator.of(dialogContext).pop();
-                            }
-                          } catch (_) {
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Produk gagal disimpan. Coba ulangi lagi.',
-                                ),
-                              ),
-                            );
-                          } finally {
-                            if (dialogContext.mounted && !dialogClosed) {
-                              setDialogState(() => saving = false);
-                            }
-                          }
-                        },
-                  child: Text(saving ? 'Menyimpan...' : 'Simpan'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    nameController.dispose();
-    categoryController.dispose();
-    priceController.dispose();
-    costController.dispose();
-    stockController.dispose();
   }
 
   Future<void> _confirmDelete(
@@ -387,6 +165,248 @@ class _ProdukPageState extends ConsumerState<ProdukPage> {
     if (confirmed != true) return;
 
     await repository.remove(product.id);
+  }
+}
+
+class _ProductEditorPage extends StatefulWidget {
+  const _ProductEditorPage({required this.repository, this.existing});
+
+  final dynamic repository;
+  final Product? existing;
+
+  @override
+  State<_ProductEditorPage> createState() => _ProductEditorPageState();
+}
+
+class _ProductEditorPageState extends State<_ProductEditorPage> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _categoryController;
+  late final TextEditingController _priceController;
+  late final TextEditingController _costController;
+  late final TextEditingController _stockController;
+
+  String? _imageBase64;
+  bool _saving = false;
+
+  bool get _isEdit => widget.existing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    _nameController = TextEditingController(text: existing?.name ?? '');
+    _categoryController = TextEditingController(text: existing?.category ?? '');
+    _priceController = TextEditingController(
+      text: existing == null ? '' : existing.sellPrice.toStringAsFixed(0),
+    );
+    _costController = TextEditingController(
+      text: existing == null ? '0' : existing.costPrice.toStringAsFixed(0),
+    );
+    _stockController = TextEditingController(
+      text: existing == null ? '0' : existing.stock.toString(),
+    );
+    _imageBase64 = existing?.imageBase64;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _categoryController.dispose();
+    _priceController.dispose();
+    _costController.dispose();
+    _stockController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(_isEdit ? 'Edit Produk' : 'Tambah Produk')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: ProductThumbnail(
+                      name: _nameController.text.isEmpty
+                          ? 'Menu Baru'
+                          : _nameController.text,
+                      imageBase64: _imageBase64,
+                      width: 120,
+                      height: 120,
+                      radius: 26,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _saving ? null : _pickImage,
+                        icon: const Icon(Icons.image_outlined),
+                        label: const Text('Upload Gambar'),
+                      ),
+                      if (_imageBase64 != null)
+                        OutlinedButton.icon(
+                          onPressed: _saving
+                              ? null
+                              : () => setState(() => _imageBase64 = null),
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Hapus Gambar'),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(labelText: 'Nama produk'),
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _categoryController,
+                    decoration: const InputDecoration(labelText: 'Kategori'),
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _priceController,
+                    decoration: const InputDecoration(labelText: 'Harga jual'),
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _costController,
+                    decoration: const InputDecoration(labelText: 'Harga modal'),
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _stockController,
+                    decoration: const InputDecoration(labelText: 'Stok'),
+                    keyboardType: TextInputType.number,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _saving
+                    ? null
+                    : () => Navigator.of(context).maybePop(),
+                child: const Text('Batal'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton(
+                onPressed: _saving ? null : _save,
+                child: Text(_saving ? 'Menyimpan...' : 'Simpan Produk'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final file = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: false,
+      );
+      if (file == null || !mounted) return;
+
+      final picked = file.files.single;
+      final bytes =
+          picked.bytes ??
+          (picked.path == null ? null : await File(picked.path!).readAsBytes());
+      if (bytes == null || bytes.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Gambar tidak bisa dibaca. Coba pilih file lain.'),
+          ),
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() => _imageBase64 = base64Encode(bytes));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Upload gambar gagal. Coba ulangi lagi.')),
+      );
+    }
+  }
+
+  Future<void> _save() async {
+    if (_nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Nama produk wajib diisi')));
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      if (_isEdit) {
+        await widget.repository.update(
+          widget.existing!.copyWith(
+            name: _nameController.text.trim(),
+            category: _categoryController.text.trim().isEmpty
+                ? 'Umum'
+                : _categoryController.text.trim(),
+            imageBase64: _imageBase64,
+            sellPrice: double.tryParse(_priceController.text) ?? 0,
+            costPrice: double.tryParse(_costController.text) ?? 0,
+            stock: int.tryParse(_stockController.text) ?? 0,
+          ),
+        );
+      } else {
+        await widget.repository.create(
+          name: _nameController.text.trim(),
+          category: _categoryController.text.trim(),
+          imageBase64: _imageBase64,
+          sellPrice: double.tryParse(_priceController.text) ?? 0,
+          costPrice: double.tryParse(_costController.text) ?? 0,
+          stock: int.tryParse(_stockController.text) ?? 0,
+        );
+      }
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Produk gagal disimpan. Coba ulangi lagi.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
   }
 }
 

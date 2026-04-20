@@ -8,7 +8,9 @@ import '../../features/laporan/laporan_detail_page.dart';
 import '../../features/laporan/laporan_filter_page.dart';
 import '../../features/laporan/laporan_page.dart';
 import '../../features/pelanggan/pelanggan_page.dart';
+import '../../features/pengaturan/manage_roles_page.dart';
 import '../../features/pengaturan/pengaturan_page.dart';
+import '../../features/pengaturan/manage_users_page.dart';
 import '../../features/pengeluaran/pengeluaran_page.dart';
 import '../../features/profil/profil_page.dart';
 import '../../features/produk/produk_page.dart';
@@ -131,6 +133,14 @@ class AppRouter {
       GoRoute(
         path: RouteNames.pengaturan,
         builder: (context, state) => const PengaturanPage(),
+      ),
+      GoRoute(
+        path: RouteNames.manageRoles,
+        builder: (context, state) => const ManageRolesPage(),
+      ),
+      GoRoute(
+        path: RouteNames.manageUsers,
+        builder: (context, state) => const ManageUsersPage(),
       ),
       GoRoute(
         path: RouteNames.profil,

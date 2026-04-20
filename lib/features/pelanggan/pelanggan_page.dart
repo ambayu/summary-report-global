@@ -26,7 +26,8 @@ class _PelangganPageState extends ConsumerState<PelangganPage> {
   @override
   Widget build(BuildContext context) {
     final session = ref.read(authRepositoryProvider).currentSession;
-    if (!(session?.role.hasPermission(AppPermission.pelanggan) ?? false)) {
+    final settings = ref.read(settingsRepositoryProvider).settings;
+    if (!settings.hasPermission(session?.roleKey, AppPermission.pelanggan)) {
       return Scaffold(
         appBar: AppBar(title: const Text('Pelanggan')),
         body: const AccessDeniedState(
@@ -231,14 +232,8 @@ class _PelangganPageState extends ConsumerState<PelangganPage> {
                           }
                         },
                         itemBuilder: (context) => const [
-                          PopupMenuItem(
-                            value: 'edit',
-                            child: Text('Edit'),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Text('Hapus'),
-                          ),
+                          PopupMenuItem(value: 'edit', child: Text('Edit')),
+                          PopupMenuItem(value: 'delete', child: Text('Hapus')),
                         ],
                         icon: customer.isFavorite
                             ? const Icon(Icons.star, color: Colors.amber)

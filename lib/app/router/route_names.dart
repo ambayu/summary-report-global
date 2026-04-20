@@ -30,5 +30,7 @@ class RouteNames {
   static const pengeluaranEdit = '/pengeluaran/:expenseId/edit';
 
   static const pengaturan = '/pengaturan';
+  static const manageRoles = '/manage-roles';
+  static const manageUsers = '/manage-users';
   static const profil = '/profil';
 }

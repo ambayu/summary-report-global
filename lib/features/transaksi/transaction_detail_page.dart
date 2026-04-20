@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
+import '../../app/router/route_names.dart';
 import '../../core/models/app_transaction.dart';
 import '../../core/models/enums.dart';
 import '../../core/utils/currency.dart';
@@ -93,6 +94,14 @@ class TransactionDetailPage extends ConsumerWidget {
           );
         }
 
+        final cashierName = tx.cashierName.trim();
+        final cashierRoleLabel = tx.cashierRoleLabel.trim();
+        final cashierLine = cashierName.isEmpty
+            ? null
+            : cashierRoleLabel.isEmpty
+            ? cashierName
+            : '$cashierName ($cashierRoleLabel)';
+
         return Scaffold(
           appBar: AppBar(
             leading: IconButton(
@@ -120,15 +129,18 @@ class TransactionDetailPage extends ConsumerWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Meja ${tx.tableNo}'),
+                          Text(
+                            tx.orderType == 'Take Away'
+                                ? 'Take Away'
+                                : 'Meja ${tx.tableNo}',
+                          ),
                           StatusBadge(status: tx.status),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Text('Pelanggan: ${tx.customerName}'),
-                      Text(
-                        'Kasir: ${tx.cashierName} (${tx.cashierRole.label})',
-                      ),
+                      Text('Jenis Pesanan: ${tx.orderType}'),
+                      if (cashierLine != null) Text('Kasir: $cashierLine'),
                       Text('Metode: ${tx.paymentMethod.label}'),
                       Text('Waktu: ${formatDateTime(tx.createdAt)}'),
                     ],
@@ -146,7 +158,7 @@ class TransactionDetailPage extends ConsumerWidget {
                   child: ListTile(
                     title: Text(item.productName),
                     subtitle: Text(
-                      '${item.qty} x ${formatCurrency(item.unitPrice)}',
+                      '${item.qty} x ${formatCurrency(item.unitPrice)}${item.variant.trim().isEmpty || item.variant == '-' ? '' : ' • ${item.variant}'}',
                     ),
                     trailing: Text(
                       formatCurrency(item.total),
@@ -164,8 +176,6 @@ class TransactionDetailPage extends ConsumerWidget {
                       _line('Subtotal', formatCurrency(tx.subtotal)),
                       _line('Diskon', '- ${formatCurrency(tx.discountAmount)}'),
                       _line('Pajak', formatCurrency(tx.taxAmount)),
-                      if (tx.serviceAmount > 0)
-                        _line('Service', formatCurrency(tx.serviceAmount)),
                       const Divider(),
                       _line(
                         'Grand Total',
@@ -183,6 +193,12 @@ class TransactionDetailPage extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () => context.push(RouteNames.transaksiBaru),
+                icon: const Icon(Icons.add_shopping_cart_outlined),
+                label: const Text('Transaksi Baru'),
+              ),
+              const SizedBox(height: 8),
               FilledButton.tonalIcon(
                 onPressed: () => _printReceipt(context, ref, tx),
                 icon: const Icon(Icons.print_outlined),

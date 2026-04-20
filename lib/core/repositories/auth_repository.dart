@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/app_settings.dart';
 import '../models/app_user.dart';
 import '../models/enums.dart';
 import '../models/user_session.dart';
@@ -18,6 +19,20 @@ class AuthRepository {
     return LocalStorage.usersBox.listenable();
   }
 
+  AppSettings get _settings {
+    final raw = LocalStorage.settingsBox.get('default');
+    if (raw == null) {
+      return const AppSettings(
+        cafeName: 'Summary Cafe',
+        logoBase64: null,
+        taxPercent: 10,
+        activePayments: [],
+        roles: [],
+      );
+    }
+    return AppSettings.fromMap(raw);
+  }
+
   UserSession? get currentSession {
     final data = LocalStorage.sessionBox.get('current');
     if (data == null) return null;
@@ -25,16 +40,12 @@ class AuthRepository {
   }
 
   List<AppUser> getAllUsers() {
-    final roleOrder = {
-      UserRole.owner: 0,
-      UserRole.admin: 1,
-      UserRole.kasir: 2,
-    };
-
+    final settings = _settings;
     final list = LocalStorage.usersBox.values.map(AppUser.fromMap).toList()
       ..sort((a, b) {
-        final compareRole =
-            (roleOrder[a.role] ?? 99).compareTo(roleOrder[b.role] ?? 99);
+        final compareRole = settings
+            .roleSortIndex(a.roleKey)
+            .compareTo(settings.roleSortIndex(b.roleKey));
         if (compareRole != 0) return compareRole;
         return a.username.compareTo(b.username);
       });
@@ -44,7 +55,7 @@ class AuthRepository {
   Future<UserSession> login({
     required String name,
     required String password,
-    required UserRole role,
+    required String roleKey,
   }) async {
     final username = _normalizeUsername(name);
     final rawPassword = password.trim();
@@ -61,14 +72,15 @@ class AuthRepository {
     if (user.password != rawPassword) {
       throw Exception('Password salah');
     }
-    if (user.role != role) {
+    if (user.roleKey != roleKey) {
       throw Exception('Role tidak sesuai dengan akun yang dipilih');
     }
 
     final session = UserSession(
       id: _uuid.v4(),
       name: user.username,
-      role: user.role,
+      roleKey: user.roleKey,
+      roleLabel: user.roleLabel,
       loggedInAt: DateTime.now(),
     );
 
@@ -79,10 +91,10 @@ class AuthRepository {
   Future<void> createUser({
     required String username,
     required String password,
-    required UserRole role,
+    required RoleDefinition role,
   }) async {
     final current = currentSession;
-    if (current == null || current.role != UserRole.owner) {
+    if (current == null || !AppRole.isOwner(current.roleKey)) {
       throw Exception('Hanya owner yang dapat menambah user');
     }
 
@@ -99,12 +111,18 @@ class AuthRepository {
       throw Exception('Username sudah digunakan');
     }
 
+    final roleDefinition = _settings.assignableRoles.firstWhere(
+      (item) => item.key == role.key,
+      orElse: () => throw Exception('Role tidak ditemukan'),
+    );
+
     final now = DateTime.now();
     final user = AppUser(
       id: _uuid.v4(),
       username: normalizedUsername,
       password: normalizedPassword,
-      role: role,
+      roleKey: roleDefinition.key,
+      roleLabel: roleDefinition.label,
       createdAt: now,
       updatedAt: now,
     );
@@ -116,10 +134,10 @@ class AuthRepository {
     required String currentUsername,
     required String newUsername,
     String? newPassword,
-    UserRole? role,
+    RoleDefinition? role,
   }) async {
     final current = currentSession;
-    if (current == null || current.role != UserRole.owner) {
+    if (current == null || !AppRole.isOwner(current.roleKey)) {
       throw Exception('Hanya owner yang dapat mengubah user');
     }
 
@@ -134,8 +152,15 @@ class AuthRepository {
     }
 
     final existing = AppUser.fromMap(data);
-    final nextRole = role ?? existing.role;
-    if (existing.role == UserRole.owner && nextRole != UserRole.owner) {
+    final nextRole = role == null
+        ? null
+        : _settings.roles.firstWhere(
+            (item) => item.key == role.key,
+            orElse: () => throw Exception('Role tidak ditemukan'),
+          );
+    if (AppRole.isOwner(existing.roleKey) &&
+        nextRole != null &&
+        !AppRole.isOwner(nextRole.key)) {
       throw Exception('Role owner tidak dapat diubah');
     }
 
@@ -156,7 +181,8 @@ class AuthRepository {
       password: trimmedPassword != null && trimmedPassword.isNotEmpty
           ? trimmedPassword
           : existing.password,
-      role: nextRole,
+      roleKey: nextRole?.key ?? existing.roleKey,
+      roleLabel: nextRole?.label ?? existing.roleLabel,
       updatedAt: DateTime.now(),
     );
 
@@ -169,7 +195,8 @@ class AuthRepository {
       final nextSession = UserSession(
         id: current.id,
         name: updated.username,
-        role: updated.role,
+        roleKey: updated.roleKey,
+        roleLabel: updated.roleLabel,
         loggedInAt: current.loggedInAt,
       );
       await LocalStorage.sessionBox.put('current', nextSession.toMap());
@@ -178,7 +205,7 @@ class AuthRepository {
 
   Future<void> deleteUser(String username) async {
     final current = currentSession;
-    if (current == null || current.role != UserRole.owner) {
+    if (current == null || !AppRole.isOwner(current.roleKey)) {
       throw Exception('Hanya owner yang dapat menghapus user');
     }
 
@@ -189,7 +216,7 @@ class AuthRepository {
     }
 
     final user = AppUser.fromMap(data);
-    if (user.role == UserRole.owner) {
+    if (AppRole.isOwner(user.roleKey)) {
       throw Exception('Akun owner tidak dapat dihapus');
     }
     if (current.name == normalizedUsername) {

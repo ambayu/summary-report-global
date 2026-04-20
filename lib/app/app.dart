@@ -23,8 +23,8 @@ class SummaryApp extends StatelessWidget {
                 cafeName: 'Summary Cafe',
                 logoBase64: null,
                 taxPercent: 10,
-                servicePercent: 5,
                 activePayments: [],
+                roles: [],
               )
             : AppSettings.fromMap(raw);
 

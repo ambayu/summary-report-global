@@ -23,8 +23,8 @@ class MainShell extends ConsumerWidget {
       builder: (context, box, child) {
         final settings = settingsRepo.settings;
         final brandName = settings.cafeName;
-        final role = session?.role;
-        final rootDestinations = _buildRootDestinations(role);
+        final roleKey = session?.roleKey;
+        final rootDestinations = _buildRootDestinations(settings, roleKey);
         final safeDestinations = rootDestinations.isEmpty
             ? const [
                 _ShellDestination(
@@ -66,6 +66,10 @@ class MainShell extends ConsumerWidget {
                     context.go(RouteNames.dashboard);
                   } else if (value == 'profile') {
                     context.push(RouteNames.profil);
+                  } else if (value == 'manage-roles') {
+                    context.push(RouteNames.manageRoles);
+                  } else if (value == 'manage-users') {
+                    context.push(RouteNames.manageUsers);
                   } else if (value == 'settings') {
                     context.push(RouteNames.pengaturan);
                   } else if (value == 'logout') {
@@ -81,8 +85,26 @@ class MainShell extends ConsumerWidget {
                     child: Text('Halaman Utama'),
                   ),
                   const PopupMenuItem(value: 'profile', child: Text('Profil')),
-                  if (role != null &&
-                      role.hasPermission(AppPermission.pengaturan))
+                  if (roleKey != null &&
+                      settings.hasPermission(
+                        roleKey,
+                        AppPermission.manageUsers,
+                      ))
+                    const PopupMenuItem(
+                      value: 'manage-roles',
+                      child: Text('Manajemen Role'),
+                    ),
+                  if (roleKey != null &&
+                      settings.hasPermission(
+                        roleKey,
+                        AppPermission.manageUsers,
+                      ))
+                    const PopupMenuItem(
+                      value: 'manage-users',
+                      child: Text('Manajemen Pengguna'),
+                    ),
+                  if (roleKey != null &&
+                      settings.hasPermission(roleKey, AppPermission.pengaturan))
                     const PopupMenuItem(
                       value: 'settings',
                       child: Text('Pengaturan'),
@@ -95,7 +117,8 @@ class MainShell extends ConsumerWidget {
             ],
           ),
           drawer: Drawer(
-            child: Column(
+            child: ListView(
+              padding: EdgeInsets.zero,
               children: [
                 UserAccountsDrawerHeader(
                   decoration: const BoxDecoration(
@@ -109,7 +132,7 @@ class MainShell extends ConsumerWidget {
                   ),
                   accountName: Text(brandName),
                   accountEmail: Text(
-                    '${session?.name ?? 'Guest'} - ${session?.role.label ?? 'Belum login'}',
+                    '${session?.name ?? 'Guest'} - ${session?.roleLabel ?? 'Belum login'}',
                   ),
                 ),
                 ListTile(
@@ -122,45 +145,62 @@ class MainShell extends ConsumerWidget {
                   title: const Text('Transaksi'),
                   onTap: () => context.go(RouteNames.transaksi),
                 ),
-                if (role != null && role.hasPermission(AppPermission.riwayat))
+                if (roleKey != null &&
+                    settings.hasPermission(roleKey, AppPermission.riwayat))
                   ListTile(
                     leading: const Icon(Icons.history_outlined),
                     title: const Text('Riwayat'),
                     onTap: () => context.go(RouteNames.riwayat),
                   ),
-                if (role != null && role.hasPermission(AppPermission.laporan))
+                if (roleKey != null &&
+                    settings.hasPermission(roleKey, AppPermission.laporan))
                   ListTile(
                     leading: const Icon(Icons.bar_chart_outlined),
                     title: const Text('Laporan'),
                     onTap: () => context.go(RouteNames.laporan),
                   ),
-                if (role != null && role.hasPermission(AppPermission.produk))
+                if (roleKey != null &&
+                    settings.hasPermission(roleKey, AppPermission.produk))
                   ListTile(
                     leading: const Icon(Icons.local_cafe_outlined),
                     title: const Text('Menu Produk'),
                     onTap: () => context.push(RouteNames.produk),
                   ),
-                if (role != null && role.hasPermission(AppPermission.pelanggan))
+                if (roleKey != null &&
+                    settings.hasPermission(roleKey, AppPermission.pelanggan))
                   ListTile(
                     leading: const Icon(Icons.groups_outlined),
                     title: const Text('Pelanggan'),
                     onTap: () => context.push(RouteNames.pelanggan),
                   ),
-                if (role != null &&
-                    role.hasPermission(AppPermission.pengeluaran))
+                if (roleKey != null &&
+                    settings.hasPermission(roleKey, AppPermission.pengeluaran))
                   ListTile(
                     leading: const Icon(Icons.payments_outlined),
                     title: const Text('Pengeluaran'),
                     onTap: () => context.push(RouteNames.pengeluaran),
                   ),
-                if (role != null &&
-                    role.hasPermission(AppPermission.pengaturan))
+                if (roleKey != null &&
+                    settings.hasPermission(roleKey, AppPermission.manageUsers))
+                  ListTile(
+                    leading: const Icon(Icons.badge_outlined),
+                    title: const Text('Manajemen Role'),
+                    onTap: () => context.push(RouteNames.manageRoles),
+                  ),
+                if (roleKey != null &&
+                    settings.hasPermission(roleKey, AppPermission.manageUsers))
+                  ListTile(
+                    leading: const Icon(Icons.manage_accounts_outlined),
+                    title: const Text('Manajemen Pengguna'),
+                    onTap: () => context.push(RouteNames.manageUsers),
+                  ),
+                if (roleKey != null &&
+                    settings.hasPermission(roleKey, AppPermission.pengaturan))
                   ListTile(
                     leading: const Icon(Icons.settings_outlined),
                     title: const Text('Pengaturan'),
                     onTap: () => context.push(RouteNames.pengaturan),
                   ),
-                const Spacer(),
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.logout),
@@ -202,7 +242,10 @@ class MainShell extends ConsumerWidget {
     );
   }
 
-  List<_ShellDestination> _buildRootDestinations(UserRole? role) {
+  List<_ShellDestination> _buildRootDestinations(
+    dynamic settings,
+    String? roleKey,
+  ) {
     final destinations = <_ShellDestination>[
       const _ShellDestination(
         branchIndex: 0,
@@ -235,7 +278,7 @@ class MainShell extends ConsumerWidget {
     ];
 
     return destinations.where((item) {
-      return role?.hasPermission(item.permission) ?? false;
+      return settings.hasPermission(roleKey, item.permission);
     }).toList();
   }
 }

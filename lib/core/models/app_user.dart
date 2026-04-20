@@ -5,7 +5,8 @@ class AppUser {
     required this.id,
     required this.username,
     required this.password,
-    required this.role,
+    required this.roleKey,
+    required this.roleLabel,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -13,21 +14,24 @@ class AppUser {
   final String id;
   final String username;
   final String password;
-  final UserRole role;
+  final String roleKey;
+  final String roleLabel;
   final DateTime createdAt;
   final DateTime updatedAt;
 
   AppUser copyWith({
     String? username,
     String? password,
-    UserRole? role,
+    String? roleKey,
+    String? roleLabel,
     DateTime? updatedAt,
   }) {
     return AppUser(
       id: id,
       username: username ?? this.username,
       password: password ?? this.password,
-      role: role ?? this.role,
+      roleKey: roleKey ?? this.roleKey,
+      roleLabel: roleLabel ?? this.roleLabel,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -38,21 +42,26 @@ class AppUser {
       'id': id,
       'username': username,
       'password': password,
-      'role': role.name,
+      'role': roleKey,
+      'roleKey': roleKey,
+      'roleLabel': roleLabel,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
   }
 
   factory AppUser.fromMap(Map<dynamic, dynamic> map) {
+    final roleKey =
+        map['roleKey']?.toString() ??
+        map['role']?.toString() ??
+        AppRole.pegawai;
     return AppUser(
       id: map['id']?.toString() ?? '',
       username: map['username']?.toString() ?? '',
       password: map['password']?.toString() ?? '',
-      role: UserRole.values.firstWhere(
-        (item) => item.name == map['role'],
-        orElse: () => UserRole.kasir,
-      ),
+      roleKey: roleKey,
+      roleLabel:
+          map['roleLabel']?.toString() ?? AppRole.labelForKey(roleKey),
       createdAt:
           DateTime.tryParse(map['createdAt']?.toString() ?? '') ??
           DateTime.now(),

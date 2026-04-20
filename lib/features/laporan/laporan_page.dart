@@ -29,7 +29,8 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
   @override
   Widget build(BuildContext context) {
     final session = ref.read(authRepositoryProvider).currentSession;
-    if (!(session?.role.hasPermission(AppPermission.laporan) ?? false)) {
+    final settings = ref.read(settingsRepositoryProvider).settings;
+    if (!settings.hasPermission(session?.roleKey, AppPermission.laporan)) {
       return Scaffold(
         appBar: AppBar(title: const Text('Laporan')),
         body: const AccessDeniedState(
@@ -381,7 +382,9 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$imported baris berhasil di-import dari XLSX')),
+        SnackBar(
+          content: Text('$imported transaksi berhasil di-import dari XLSX'),
+        ),
       );
     } catch (_) {
       if (!mounted) return;

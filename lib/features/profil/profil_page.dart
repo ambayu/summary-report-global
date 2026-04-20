@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
 import '../../app/router/route_names.dart';
-import '../../core/models/enums.dart';
 import '../../core/utils/date_time.dart';
 
 class ProfilPage extends ConsumerWidget {
@@ -156,7 +155,7 @@ class ProfilPage extends ConsumerWidget {
                           ),
                           const SizedBox(height: 6),
                           Text('Username: ${session.name}'),
-                          Text('Role: ${session.role.label}'),
+                          Text('Role: ${session.roleLabel}'),
                           Text('Login: ${formatDateTime(session.loggedInAt)}'),
                         ],
                       ),

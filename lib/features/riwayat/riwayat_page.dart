@@ -160,12 +160,11 @@ class _RiwayatPageState extends ConsumerState<RiwayatPage> {
     setState(() => _exporting = true);
     try {
       final repository = ref.read(transactionRepositoryProvider);
-      final bytes = repository.exportFilteredToXlsx(
-        status: _status,
-        startDate: _dateRange?.start,
-        endDate: _dateRange?.end,
-        sheetName: 'Riwayat',
-      );
+        final bytes = repository.exportFilteredToXlsx(
+          status: _status,
+          startDate: _dateRange?.start,
+          endDate: _dateRange?.end,
+        );
 
       final now = DateTime.now().millisecondsSinceEpoch;
       final savePath = await ExportFileHelper.saveBytes(

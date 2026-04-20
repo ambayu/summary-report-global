@@ -6,14 +6,15 @@ class AppTransaction {
     required this.id,
     required this.orderNo,
     required this.tableNo,
+    required this.orderType,
     this.customerId,
     required this.customerName,
     required this.cashierName,
-    required this.cashierRole,
+    required this.cashierRoleKey,
+    required this.cashierRoleLabel,
     required this.items,
     required this.discountPercent,
     required this.taxPercent,
-    required this.servicePercent,
     required this.paymentMethod,
     required this.status,
     required this.paidAmount,
@@ -24,14 +25,15 @@ class AppTransaction {
   final String id;
   final String orderNo;
   final String tableNo;
+  final String orderType;
   final String? customerId;
   final String customerName;
   final String cashierName;
-  final UserRole cashierRole;
+  final String cashierRoleKey;
+  final String cashierRoleLabel;
   final List<TransactionItem> items;
   final double discountPercent;
   final double taxPercent;
-  final double servicePercent;
   final PaymentMethod paymentMethod;
   final TransactionStatus status;
   final double paidAmount;
@@ -42,8 +44,7 @@ class AppTransaction {
   double get discountAmount => subtotal * (discountPercent / 100);
   double get taxable => subtotal - discountAmount;
   double get taxAmount => taxable * (taxPercent / 100);
-  double get serviceAmount => taxable * (servicePercent / 100);
-  double get grandTotal => taxable + taxAmount + serviceAmount;
+  double get grandTotal => taxable + taxAmount;
   double get pendingAmount => (grandTotal - paidAmount).clamp(0, grandTotal);
 
   AppTransaction copyWith({
@@ -55,14 +56,15 @@ class AppTransaction {
       id: id,
       orderNo: orderNo,
       tableNo: tableNo,
+      orderType: orderType,
       customerId: customerId,
       customerName: customerName,
       cashierName: cashierName,
-      cashierRole: cashierRole,
+      cashierRoleKey: cashierRoleKey,
+      cashierRoleLabel: cashierRoleLabel,
       items: items,
       discountPercent: discountPercent,
       taxPercent: taxPercent,
-      servicePercent: servicePercent,
       paymentMethod: paymentMethod,
       status: status ?? this.status,
       paidAmount: paidAmount ?? this.paidAmount,
@@ -76,14 +78,16 @@ class AppTransaction {
       'id': id,
       'orderNo': orderNo,
       'tableNo': tableNo,
+      'orderType': orderType,
       'customerId': customerId,
       'customerName': customerName,
       'cashierName': cashierName,
-      'cashierRole': cashierRole.name,
+      'cashierRole': cashierRoleKey,
+      'cashierRoleKey': cashierRoleKey,
+      'cashierRoleLabel': cashierRoleLabel,
       'items': items.map((item) => item.toMap()).toList(),
       'discountPercent': discountPercent,
       'taxPercent': taxPercent,
-      'servicePercent': servicePercent,
       'paymentMethod': paymentMethod.name,
       'status': status.name,
       'paidAmount': paidAmount,
@@ -95,21 +99,27 @@ class AppTransaction {
   factory AppTransaction.fromMap(Map<dynamic, dynamic> map) {
     final itemMaps = (map['items'] as List<dynamic>? ?? [])
         .cast<Map<dynamic, dynamic>>();
+    final cashierRoleKey =
+        map['cashierRoleKey']?.toString() ??
+        map['cashierRole']?.toString() ??
+        AppRole.pegawai;
     return AppTransaction(
       id: map['id']?.toString() ?? '',
       orderNo: map['orderNo']?.toString() ?? '',
       tableNo: map['tableNo']?.toString() ?? '-',
+      orderType:
+          map['orderType']?.toString() ??
+          ((map['tableNo']?.toString() ?? '-') == '-' ? 'Take Away' : 'Dine In'),
       customerId: map['customerId']?.toString(),
       customerName: map['customerName']?.toString() ?? 'Umum',
       cashierName: map['cashierName']?.toString() ?? '-',
-      cashierRole: UserRole.values.firstWhere(
-        (role) => role.name == map['cashierRole'],
-        orElse: () => UserRole.kasir,
-      ),
+      cashierRoleKey: cashierRoleKey,
+      cashierRoleLabel:
+          map['cashierRoleLabel']?.toString() ??
+          AppRole.labelForKey(cashierRoleKey),
       items: itemMaps.map(TransactionItem.fromMap).toList(),
       discountPercent: (map['discountPercent'] as num?)?.toDouble() ?? 0,
       taxPercent: (map['taxPercent'] as num?)?.toDouble() ?? 0,
-      servicePercent: (map['servicePercent'] as num?)?.toDouble() ?? 0,
       paymentMethod: PaymentMethod.values.firstWhere(
         (method) => method.name == map['paymentMethod'],
         orElse: () => PaymentMethod.cash,

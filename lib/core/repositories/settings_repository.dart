@@ -15,8 +15,8 @@ class SettingsRepository {
         cafeName: 'Summary Cafe',
         logoBase64: null,
         taxPercent: 10,
-        servicePercent: 5,
         activePayments: [],
+        roles: [],
       );
     }
 
