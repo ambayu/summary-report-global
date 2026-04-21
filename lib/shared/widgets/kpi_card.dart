@@ -20,21 +20,21 @@ class KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final secondary = Theme.of(context).colorScheme.secondary;
     return Card(
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           gradient: highlight
-              ? const LinearGradient(
-                  colors: [AppColors.primaryRed, AppColors.primaryDark],
-                )
+              ? LinearGradient(colors: [primary, secondary])
               : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: highlight ? Colors.white : AppColors.primaryRed),
+            Icon(icon, color: highlight ? Colors.white : primary),
             const SizedBox(height: 8),
             Text(
               title,
@@ -44,12 +44,16 @@ class KpiCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: highlight ? Colors.white : AppColors.textDark,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: highlight ? Colors.white : AppColors.textDark,
+                ),
               ),
             ),
             if (subtitle != null) ...[

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../app/theme/app_colors.dart';
 import '../../core/models/app_settings.dart';
 import '../../core/models/enums.dart';
 import '../../shared/widgets/access_denied_state.dart';
@@ -25,6 +26,7 @@ class _PengaturanPageState extends ConsumerState<PengaturanPage> {
   late TextEditingController _taxController;
   late Set<PaymentMethod> _activePayments;
   String? _logoBase64;
+  late String _themeColorHex;
 
   @override
   void initState() {
@@ -36,6 +38,7 @@ class _PengaturanPageState extends ConsumerState<PengaturanPage> {
     );
     _activePayments = settings.activePayments.toSet();
     _logoBase64 = settings.logoBase64;
+    _themeColorHex = settings.themeColorHex;
   }
 
   @override
@@ -174,6 +177,60 @@ class _PengaturanPageState extends ConsumerState<PengaturanPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
+                      'Warna Tema',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: AppColors.themePaletteHex.map((hex) {
+                        final color = AppColors.fromHex(hex);
+                        final selected = _themeColorHex == hex;
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(999),
+                          onTap: () => setState(() => _themeColorHex = hex),
+                          child: Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: selected
+                                    ? Colors.black87
+                                    : Colors.transparent,
+                                width: 2,
+                              ),
+                            ),
+                            child: selected
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white,
+                                    size: 18,
+                                  )
+                                : null,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Pilih warna utama aplikasi (button, indikator, aksen).',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
                       'Metode Pembayaran Aktif',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
@@ -211,6 +268,7 @@ class _PengaturanPageState extends ConsumerState<PengaturanPage> {
                     taxPercent: double.tryParse(_taxController.text) ?? 0,
                     activePayments: _activePayments.toList(),
                     roles: currentSettings.roles,
+                    themeColorHex: _themeColorHex,
                   );
 
                   await settingsRepository.save(next);

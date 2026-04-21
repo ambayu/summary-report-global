@@ -10,6 +10,7 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
     late Color bg;
     late Color fg;
 
@@ -18,8 +19,8 @@ class StatusBadge extends StatelessWidget {
         bg = AppColors.success.withValues(alpha: 0.12);
         fg = AppColors.success;
       case TransactionStatus.pending:
-        bg = AppColors.primaryRed.withValues(alpha: 0.12);
-        fg = AppColors.primaryRed;
+        bg = primary.withValues(alpha: 0.12);
+        fg = primary;
       case TransactionStatus.splitBill:
         bg = AppColors.warning.withValues(alpha: 0.15);
         fg = AppColors.warning;

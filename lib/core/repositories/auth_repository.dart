@@ -28,6 +28,7 @@ class AuthRepository {
         taxPercent: 10,
         activePayments: [],
         roles: [],
+        themeColorHex: '#B3261E',
       );
     }
     return AppSettings.fromMap(raw);

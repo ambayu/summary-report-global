@@ -36,6 +36,7 @@ class DashboardPage extends ConsumerWidget {
                 final transactions = transactionRepo.getAll();
                 final products = productRepo.getAll();
                 final now = DateTime.now();
+                final kpiColumns = 2;
 
                 final todayTx = transactions.where((tx) {
                   return tx.createdAt.year == now.year &&
@@ -95,7 +96,10 @@ class DashboardPage extends ConsumerWidget {
                 return RefreshIndicator(
                   onRefresh: () async {},
                   child: ListView(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
                     children: [
                       Card(
                         child: ListTile(
@@ -114,12 +118,12 @@ class DashboardPage extends ConsumerWidget {
                       ),
                       const SizedBox(height: 12),
                       GridView.count(
-                        crossAxisCount: 2,
+                        crossAxisCount: kpiColumns,
                         crossAxisSpacing: 10,
                         mainAxisSpacing: 10,
+                        mainAxisExtent: 112,
                         physics: const NeverScrollableScrollPhysics(),
                         shrinkWrap: true,
-                        childAspectRatio: 1.45,
                         children: [
                           KpiCard(
                             title: 'Pemasukan Hari Ini',
@@ -145,6 +149,8 @@ class DashboardPage extends ConsumerWidget {
                         ],
                       ),
                       const SizedBox(height: 14),
+                      _buildTrendCard(context, daily),
+                      const SizedBox(height: 10),
                       Card(
                         child: Padding(
                           padding: const EdgeInsets.all(14),
@@ -157,69 +163,6 @@ class DashboardPage extends ConsumerWidget {
                               ),
                               const SizedBox(height: 6),
                               Text(topProduct),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Tren 7 Hari',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const SizedBox(height: 12),
-                              SizedBox(
-                                height: 140,
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: daily
-                                      .map(
-                                        (entry) => Expanded(
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 4,
-                                            ),
-                                            child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.end,
-                                              children: [
-                                                Container(
-                                                  height:
-                                                      (entry['value'] as double)
-                                                          .clamp(0, 120)
-                                                          .toDouble() +
-                                                      8,
-                                                  decoration: BoxDecoration(
-                                                    color: AppColors.primaryRed
-                                                        .withValues(
-                                                          alpha: 0.75,
-                                                        ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          8,
-                                                        ),
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 6),
-                                                Text(
-                                                  entry['label'] as String,
-                                                  style: Theme.of(
-                                                    context,
-                                                  ).textTheme.bodySmall,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
-                                ),
-                              ),
                             ],
                           ),
                         ),
@@ -278,6 +221,62 @@ class DashboardPage extends ConsumerWidget {
           },
         );
       },
+    );
+  }
+
+  Widget _buildTrendCard(
+    BuildContext context,
+    List<Map<String, Object>> daily,
+  ) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Tren 7 Hari', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 140,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: daily
+                    .map(
+                      (entry) => Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Container(
+                                height:
+                                    (entry['value'] as double)
+                                        .clamp(0, 120)
+                                        .toDouble() +
+                                    8,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withValues(alpha: 0.75),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                entry['label'] as String,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

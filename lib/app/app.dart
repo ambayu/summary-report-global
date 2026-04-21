@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../core/models/app_settings.dart';
 import '../core/storage/local_storage.dart';
 import 'router/app_router.dart';
+import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 
 class SummaryApp extends StatelessWidget {
@@ -25,13 +26,16 @@ class SummaryApp extends StatelessWidget {
                 taxPercent: 10,
                 activePayments: [],
                 roles: [],
+                themeColorHex: '#B3261E',
               )
             : AppSettings.fromMap(raw);
 
         return MaterialApp.router(
           title: settings.cafeName,
           debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme,
+          theme: AppTheme.lightTheme(
+            primaryColor: AppColors.fromHex(settings.themeColorHex),
+          ),
           routerConfig: router,
         );
       },

@@ -7,6 +7,7 @@ class AppSettings {
     required this.taxPercent,
     required this.activePayments,
     required this.roles,
+    required this.themeColorHex,
   });
 
   final String cafeName;
@@ -14,6 +15,7 @@ class AppSettings {
   final double taxPercent;
   final List<PaymentMethod> activePayments;
   final List<RoleDefinition> roles;
+  final String themeColorHex;
 
   AppSettings copyWith({
     String? cafeName,
@@ -21,6 +23,7 @@ class AppSettings {
     double? taxPercent,
     List<PaymentMethod>? activePayments,
     List<RoleDefinition>? roles,
+    String? themeColorHex,
   }) {
     return AppSettings(
       cafeName: cafeName ?? this.cafeName,
@@ -28,6 +31,7 @@ class AppSettings {
       taxPercent: taxPercent ?? this.taxPercent,
       activePayments: activePayments ?? this.activePayments,
       roles: roles ?? this.roles,
+      themeColorHex: themeColorHex ?? this.themeColorHex,
     );
   }
 
@@ -38,6 +42,7 @@ class AppSettings {
       'taxPercent': taxPercent,
       'activePayments': activePayments.map((payment) => payment.name).toList(),
       'roles': roles.map((role) => role.toMap()).toList(),
+      'themeColorHex': themeColorHex,
     };
   }
 
@@ -66,6 +71,7 @@ class AppSettings {
           )
           .toList(),
       roles: roles,
+      themeColorHex: map['themeColorHex']?.toString() ?? '#B3261E',
     );
   }
 

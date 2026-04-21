@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
 import '../../app/router/route_names.dart';
-import '../../app/theme/app_colors.dart';
 import '../../core/models/enums.dart';
 import '../../shared/widgets/brand_avatar.dart';
 
@@ -54,11 +53,13 @@ class MainShell extends ConsumerWidget {
               PopupMenuButton<String>(
                 icon: CircleAvatar(
                   radius: 16,
-                  backgroundColor: AppColors.primaryRed.withValues(alpha: 0.12),
-                  child: const Icon(
+                  backgroundColor: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 0.12),
+                  child: Icon(
                     Icons.person,
                     size: 18,
-                    color: AppColors.primaryRed,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
                 onSelected: (value) async {
@@ -121,9 +122,12 @@ class MainShell extends ConsumerWidget {
               padding: EdgeInsets.zero,
               children: [
                 UserAccountsDrawerHeader(
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [AppColors.primaryRed, AppColors.primaryDark],
+                      colors: [
+                        Theme.of(context).colorScheme.primary,
+                        Theme.of(context).colorScheme.secondary,
+                      ],
                     ),
                   ),
                   currentAccountPicture: BrandAvatar(

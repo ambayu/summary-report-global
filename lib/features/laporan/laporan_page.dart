@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 
 import '../../app/providers.dart';
+import '../../app/theme/app_colors.dart';
+import '../../core/models/app_transaction.dart';
 import '../../core/models/enums.dart';
+import '../../core/models/expense.dart';
 import '../../core/utils/currency.dart';
 import '../../core/utils/export_file_helper.dart';
 import '../../shared/widgets/access_denied_state.dart';
@@ -49,6 +53,8 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
           valueListenable: expenseRepo.listenable,
           builder: (context, box2, child2) {
             final now = DateTime.now();
+            final allTx = txRepo.getAll();
+            final allEx = expenseRepo.getAll();
             final tx = txRepo.getAll().where((item) {
               return _matchesReportFilter(item.createdAt, now);
             }).toList();
@@ -77,6 +83,18 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
               now.year,
               ...txRepo.getAll().map((item) => item.createdAt.year),
             }.toList()..sort((a, b) => b.compareTo(a));
+            final media = MediaQuery.of(context);
+            const kpiColumns = 2;
+            final compactTrend = media.size.width <= 430;
+            final weeklyBucketCount = compactTrend ? 6 : 8;
+            final monthlyBucketCount = compactTrend ? 4 : 6;
+            final trendBuckets = _buildTrendBuckets(
+              allTx,
+              allEx,
+              now,
+              weeklyBucketCount: weeklyBucketCount,
+              monthlyBucketCount: monthlyBucketCount,
+            );
 
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -157,12 +175,12 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
                 ),
                 const SizedBox(height: 12),
                 GridView.count(
-                  crossAxisCount: 2,
+                  crossAxisCount: kpiColumns,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
+                  mainAxisExtent: 112,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.45,
                   children: [
                     KpiCard(
                       title: 'Omzet',
@@ -186,6 +204,31 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
                       icon: Icons.trending_up,
                     ),
                   ],
+                ),
+                const SizedBox(height: 10),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Grafik Tren',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _trendSubtitle(
+                            weeklyBucketCount: weeklyBucketCount,
+                            monthlyBucketCount: monthlyBucketCount,
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 12),
+                        _TrendChart(buckets: trendBuckets),
+                      ],
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Card(
@@ -323,6 +366,173 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
     return '$day/$month/${value.year}';
   }
 
+  List<_TrendBucket> _buildTrendBuckets(
+    List<AppTransaction> transactions,
+    List<Expense> expenses,
+    DateTime now, {
+    required int weeklyBucketCount,
+    required int monthlyBucketCount,
+  }) {
+    if (_period == 'hari') {
+      final start = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(const Duration(days: 6));
+      return List.generate(7, (index) {
+        final day = start.add(Duration(days: index));
+        final omzet = transactions
+            .where(
+              (tx) =>
+                  _isSameDay(tx.createdAt, day) &&
+                  _matchesTrendBaseFilter(tx.createdAt),
+            )
+            .fold<double>(
+              0,
+              (sum, tx) =>
+                  sum +
+                  (tx.status == TransactionStatus.pending ? 0 : tx.grandTotal),
+            );
+        final expense = expenses
+            .where(
+              (item) =>
+                  _isSameDay(item.createdAt, day) &&
+                  _matchesTrendBaseFilter(item.createdAt),
+            )
+            .fold<double>(0, (sum, item) => sum + item.amount);
+        return _TrendBucket(
+          label: '${day.day}/${day.month}',
+          omzet: omzet,
+          expense: expense,
+        );
+      });
+    }
+
+    if (_period == 'minggu') {
+      final thisWeekStart = _startOfWeek(now);
+      return List.generate(weeklyBucketCount, (index) {
+        final weekStart = thisWeekStart.subtract(
+          Duration(days: ((weeklyBucketCount - 1) - index) * 7),
+        );
+        final weekEnd = weekStart.add(const Duration(days: 6));
+        final weekEndTime = DateTime(
+          weekEnd.year,
+          weekEnd.month,
+          weekEnd.day,
+          23,
+          59,
+          59,
+          999,
+        );
+
+        final omzet = transactions
+            .where(
+              (tx) =>
+                  !tx.createdAt.isBefore(weekStart) &&
+                  !tx.createdAt.isAfter(weekEndTime) &&
+                  _matchesTrendBaseFilter(tx.createdAt),
+            )
+            .fold<double>(
+              0,
+              (sum, tx) =>
+                  sum +
+                  (tx.status == TransactionStatus.pending ? 0 : tx.grandTotal),
+            );
+        final expense = expenses
+            .where(
+              (item) =>
+                  !item.createdAt.isBefore(weekStart) &&
+                  !item.createdAt.isAfter(weekEndTime) &&
+                  _matchesTrendBaseFilter(item.createdAt),
+            )
+            .fold<double>(0, (sum, item) => sum + item.amount);
+        return _TrendBucket(
+          label: '${weekStart.day}/${weekStart.month}',
+          omzet: omzet,
+          expense: expense,
+        );
+      });
+    }
+
+    return List.generate(monthlyBucketCount, (index) {
+      final monthStart = DateTime(
+        now.year,
+        now.month - ((monthlyBucketCount - 1) - index),
+        1,
+      );
+      final omzet = transactions
+          .where(
+            (tx) =>
+                tx.createdAt.year == monthStart.year &&
+                tx.createdAt.month == monthStart.month &&
+                _matchesTrendBaseFilter(tx.createdAt),
+          )
+          .fold<double>(
+            0,
+            (sum, tx) =>
+                sum +
+                (tx.status == TransactionStatus.pending ? 0 : tx.grandTotal),
+          );
+      final expense = expenses
+          .where(
+            (item) =>
+                item.createdAt.year == monthStart.year &&
+                item.createdAt.month == monthStart.month &&
+                _matchesTrendBaseFilter(item.createdAt),
+          )
+          .fold<double>(0, (sum, item) => sum + item.amount);
+      return _TrendBucket(
+        label: _monthLabel(monthStart.month),
+        omzet: omzet,
+        expense: expense,
+      );
+    });
+  }
+
+  bool _matchesTrendBaseFilter(DateTime date) {
+    if (_selectedYear != null && date.year != _selectedYear) {
+      return false;
+    }
+    if (!_isWithinRange(date, _dateRange)) return false;
+    return true;
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  DateTime _startOfWeek(DateTime date) {
+    final base = DateTime(date.year, date.month, date.day);
+    return base.subtract(Duration(days: base.weekday - 1));
+  }
+
+  String _monthLabel(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des',
+    ];
+    return months[month - 1];
+  }
+
+  String _trendSubtitle({
+    required int weeklyBucketCount,
+    required int monthlyBucketCount,
+  }) {
+    if (_period == 'hari') return '7 hari terakhir';
+    if (_period == 'minggu') return '$weeklyBucketCount minggu terakhir';
+    return '$monthlyBucketCount bulan terakhir';
+  }
+
   @override
   void dispose() {
     _importHoldTimer?.cancel();
@@ -448,5 +658,186 @@ class _LaporanPageState extends ConsumerState<LaporanPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+}
+
+class _TrendBucket {
+  const _TrendBucket({
+    required this.label,
+    required this.omzet,
+    required this.expense,
+  });
+
+  final String label;
+  final double omzet;
+  final double expense;
+}
+
+class _TrendChart extends StatelessWidget {
+  const _TrendChart({required this.buckets});
+
+  final List<_TrendBucket> buckets;
+
+  @override
+  Widget build(BuildContext context) {
+    if (buckets.isEmpty) {
+      return const SizedBox(
+        height: 140,
+        child: Center(child: Text('Belum ada data untuk ditampilkan.')),
+      );
+    }
+
+    final maxValue = buckets.fold<double>(
+      0,
+      (value, item) => math.max(value, math.max(item.omzet, item.expense)),
+    );
+    final safeMax = maxValue <= 0 ? 1.0 : maxValue;
+    final labels = buckets.map((item) => item.label).toList();
+    final primary = Theme.of(context).colorScheme.primary;
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            _LegendDot(color: primary, text: 'Omzet'),
+            const SizedBox(width: 14),
+            const _LegendDot(color: Color(0xFF6B7280), text: 'Pengeluaran'),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 130,
+          child: CustomPaint(
+            painter: _TrendChartPainter(
+              buckets: buckets,
+              maxValue: safeMax,
+              omzetColor: primary,
+            ),
+            child: const SizedBox.expand(),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: labels
+              .map(
+                (label) => Expanded(
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      fontSize: 10,
+                      color: AppColors.mutedGray,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.color, required this.text});
+
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          text,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: AppColors.mutedGray,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TrendChartPainter extends CustomPainter {
+  const _TrendChartPainter({
+    required this.buckets,
+    required this.maxValue,
+    required this.omzetColor,
+  });
+
+  final List<_TrendBucket> buckets;
+  final double maxValue;
+  final Color omzetColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (buckets.length < 2) return;
+
+    final chartRect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final gridPaint = Paint()
+      ..color = const Color(0xFFE5E7EB)
+      ..strokeWidth = 1;
+    for (var i = 1; i <= 3; i++) {
+      final y = chartRect.top + (chartRect.height / 4) * i;
+      canvas.drawLine(
+        Offset(chartRect.left, y),
+        Offset(chartRect.right, y),
+        gridPaint,
+      );
+    }
+
+    final omzetPath = Path();
+    final expensePath = Path();
+    final stepX = chartRect.width / (buckets.length - 1);
+
+    for (var i = 0; i < buckets.length; i++) {
+      final x = chartRect.left + (stepX * i);
+      final omzetY =
+          chartRect.bottom - ((buckets[i].omzet / maxValue) * chartRect.height);
+      final expenseY =
+          chartRect.bottom -
+          ((buckets[i].expense / maxValue) * chartRect.height);
+      final omzetPoint = Offset(x, omzetY);
+      final expensePoint = Offset(x, expenseY);
+
+      if (i == 0) {
+        omzetPath.moveTo(omzetPoint.dx, omzetPoint.dy);
+        expensePath.moveTo(expensePoint.dx, expensePoint.dy);
+      } else {
+        omzetPath.lineTo(omzetPoint.dx, omzetPoint.dy);
+        expensePath.lineTo(expensePoint.dx, expensePoint.dy);
+      }
+    }
+
+    final omzetPaint = Paint()
+      ..color = omzetColor
+      ..strokeWidth = 2.4
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final expensePaint = Paint()
+      ..color = const Color(0xFF6B7280)
+      ..strokeWidth = 2.2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawPath(expensePath, expensePaint);
+    canvas.drawPath(omzetPath, omzetPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TrendChartPainter oldDelegate) {
+    return oldDelegate.buckets != buckets ||
+        oldDelegate.maxValue != maxValue ||
+        oldDelegate.omzetColor != omzetColor;
   }
 }

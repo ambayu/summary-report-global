@@ -4,7 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
 class AppTheme {
-  static ThemeData get lightTheme {
+  static ThemeData lightTheme({Color? primaryColor}) {
+    final primary = primaryColor ?? AppColors.primaryRed;
+    final secondary = _darken(primary, 0.22);
     final base = ThemeData.light(useMaterial3: true);
 
     final textTheme = TextTheme(
@@ -33,10 +35,10 @@ class AppTheme {
     return base.copyWith(
       scaffoldBackgroundColor: AppColors.backgroundCream,
       textTheme: textTheme,
-      colorScheme: const ColorScheme.light(
-        primary: AppColors.primaryRed,
-        secondary: AppColors.primaryDark,
-        secondaryContainer: AppColors.primaryRed,
+      colorScheme: ColorScheme.light(
+        primary: primary,
+        secondary: secondary,
+        secondaryContainer: primary,
         surface: AppColors.surfaceWhite,
         onPrimary: Colors.white,
         onSecondaryContainer: Colors.white,
@@ -66,7 +68,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primaryRed, width: 1.3),
+          borderSide: BorderSide(color: primary, width: 1.3),
         ),
       ),
       cardTheme: CardThemeData(
@@ -79,8 +81,8 @@ class AppTheme {
       ),
       chipTheme: base.chipTheme.copyWith(
         side: const BorderSide(color: AppColors.border),
-        selectedColor: AppColors.primaryRed,
-        secondarySelectedColor: AppColors.primaryRed,
+        selectedColor: primary,
+        secondarySelectedColor: primary,
         checkmarkColor: Colors.white,
         labelStyle: GoogleFonts.dmSans(
           fontWeight: FontWeight.w600,
@@ -107,13 +109,11 @@ class AppTheme {
           }),
           backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
             if (states.contains(WidgetState.selected)) {
-              return AppColors.primaryRed;
+              return primary;
             }
             return AppColors.surfaceWhite;
           }),
-          side: const WidgetStatePropertyAll(
-            BorderSide(color: AppColors.primaryDark),
-          ),
+          side: WidgetStatePropertyAll(BorderSide(color: secondary)),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
           ),
@@ -121,7 +121,7 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.surfaceWhite,
-        indicatorColor: AppColors.primaryRed,
+        indicatorColor: primary,
         iconTheme: WidgetStateProperty.resolveWith<IconThemeData>((states) {
           if (states.contains(WidgetState.selected)) {
             return const IconThemeData(color: Colors.white);
@@ -132,7 +132,7 @@ class AppTheme {
           if (states.contains(WidgetState.selected)) {
             return GoogleFonts.dmSans(
               fontWeight: FontWeight.w700,
-              color: AppColors.primaryRed,
+              color: primary,
             );
           }
           return GoogleFonts.dmSans(
@@ -142,12 +142,12 @@ class AppTheme {
         }),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: AppColors.primaryRed,
-        foregroundColor: Colors.white,
-      ),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+      ).copyWith(backgroundColor: primary, foregroundColor: Colors.white),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primaryRed,
+          backgroundColor: primary,
           foregroundColor: Colors.white,
           minimumSize: const Size.fromHeight(48),
           shape: RoundedRectangleBorder(
@@ -157,13 +157,19 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.primaryRed,
+          backgroundColor: primary,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: AppColors.primaryRed.withValues(alpha: 0.45),
+          disabledBackgroundColor: primary.withValues(alpha: 0.45),
           disabledForegroundColor: Colors.white,
           textStyle: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
         ),
       ),
     );
+  }
+
+  static Color _darken(Color color, double amount) {
+    final hsl = HSLColor.fromColor(color);
+    final darker = hsl.withLightness((hsl.lightness - amount).clamp(0.0, 1.0));
+    return darker.toColor();
   }
 }

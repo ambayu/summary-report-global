@@ -21,6 +21,7 @@ class ProdukPage extends ConsumerStatefulWidget {
 
 class _ProdukPageState extends ConsumerState<ProdukPage> {
   String _query = '';
+  bool _importing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +42,17 @@ class _ProdukPageState extends ConsumerState<ProdukPage> {
       appBar: AppBar(
         title: const Text('Menu Produk'),
         actions: [
+          IconButton(
+            tooltip: 'Import Excel',
+            onPressed: _importing ? null : () => _importExcel(repository),
+            icon: _importing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.upload_file_outlined),
+          ),
           IconButton(
             onPressed: () => _openProductEditor(context, repository),
             icon: const Icon(Icons.add_circle_outline),
@@ -165,6 +177,49 @@ class _ProdukPageState extends ConsumerState<ProdukPage> {
     if (confirmed != true) return;
 
     await repository.remove(product.id);
+  }
+
+  Future<void> _importExcel(dynamic repository) async {
+    setState(() => _importing = true);
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xlsx'],
+        withData: true,
+      );
+      if (picked == null || picked.files.isEmpty) return;
+
+      final file = picked.files.single;
+      final bytes =
+          file.bytes ??
+          (file.path == null ? null : await File(file.path!).readAsBytes());
+      if (bytes == null || bytes.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('File Excel tidak bisa dibaca.')),
+        );
+        return;
+      }
+
+      final imported = await repository.importFromXlsx(bytes);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            imported == 0
+                ? 'Tidak ada data menu yang berhasil diimport.'
+                : '$imported menu berhasil diimport dari Excel.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Import Excel gagal. Cek format file.')),
+      );
+    } finally {
+      if (mounted) setState(() => _importing = false);
+    }
   }
 }
 
@@ -455,9 +510,10 @@ class _ProductItem extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        formatCurrency(product.sellPrice),
+                        'Harga: ${formatCurrency(product.sellPrice)}',
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w800,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
                       const SizedBox(height: 4),
